@@ -1,58 +1,57 @@
-import { DeployButton } from "@/components/deploy-button";
-import { EnvVarWarning } from "@/components/env-var-warning";
-import { AuthButton } from "@/components/auth-button";
-import { Hero } from "@/components/hero";
-import { ThemeSwitcher } from "@/components/theme-switcher";
-import { ConnectSupabaseSteps } from "@/components/tutorial/connect-supabase-steps";
-import { SignUpUserSteps } from "@/components/tutorial/sign-up-user-steps";
-import { hasEnvVars } from "@/lib/utils";
 import Link from "next/link";
-import { Suspense } from "react";
+import { SiteFooter } from "@/components/site-footer";
+import { SiteHeader } from "@/components/site-header";
 
-export default function Home() {
+export default function PublisherHomePage() {
   return (
-    <main className="min-h-screen flex flex-col items-center">
-      <div className="flex-1 w-full flex flex-col gap-20 items-center">
-        <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16">
-          <div className="w-full max-w-5xl flex justify-between items-center p-3 px-5 text-sm">
-            <div className="flex gap-5 items-center font-semibold">
-              <Link href={"/"}>Next.js Supabase Starter</Link>
-              <div className="flex items-center gap-2">
-                <DeployButton />
-              </div>
-            </div>
-            {!hasEnvVars ? (
-              <EnvVarWarning />
-            ) : (
-              <Suspense>
-                <AuthButton />
-              </Suspense>
-            )}
+    <>
+      <SiteHeader />
+      <main className="mx-auto min-h-screen max-w-7xl px-6 py-10">
+        <section className="grid gap-10 border-b border-border pb-10 md:grid-cols-3">
+          <div className="md:col-span-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-primary">
+              Featured
+            </p>
+            <h2 className="mt-3 text-4xl font-semibold leading-tight">
+              Accelerating High-Quality Research Publication Across Multiple Journals
+            </h2>
+            <p className="mt-4 text-base text-muted-foreground">
+              PublisherOS supports manuscript submission, peer review, editorial decisions, and publication
+              workflows with a professional, policy-driven infrastructure.
+            </p>
           </div>
-        </nav>
-        <div className="flex-1 flex flex-col gap-20 max-w-5xl p-5">
-          <Hero />
-          <main className="flex-1 flex flex-col gap-6 px-4">
-            <h2 className="font-medium text-xl mb-4">Next steps</h2>
-            {hasEnvVars ? <SignUpUserSteps /> : <ConnectSupabaseSteps />}
-          </main>
-        </div>
+          <aside className="rounded border border-border bg-muted/40 p-5">
+            <h3 className="text-base font-semibold">Quick Access</h3>
+            <div className="mt-4 grid gap-3">
+              <Link href="/j/demo-journal" className="rounded border bg-white p-3 text-sm hover:bg-accent">
+                Journal Homepage
+              </Link>
+              <Link href="/dashboard/submissions" className="rounded border bg-white p-3 text-sm hover:bg-accent">
+                Submit a Manuscript
+              </Link>
+              <Link href="/dashboard/editorial" className="rounded border bg-white p-3 text-sm hover:bg-accent">
+                Editorial Office
+              </Link>
+            </div>
+          </aside>
+        </section>
 
-        <footer className="w-full flex items-center justify-center border-t mx-auto text-center text-xs gap-8 py-16">
-          <p>
-            Powered by{" "}
-            <a
-              href="https://supabase.com/?utm_source=create-next-app&utm_medium=template&utm_term=nextjs"
-              target="_blank"
-              className="font-bold hover:underline"
-              rel="noreferrer"
-            >
-              Supabase
-            </a>
-          </p>
-          <ThemeSwitcher />
-        </footer>
-      </div>
-    </main>
+        <section className="mt-10 grid gap-6 md:grid-cols-3">
+          {[
+            "Rigorous peer review workflow",
+            "Configurable multi-journal editorial policies",
+            "Production-ready publishing pipelines",
+          ].map((item) => (
+            <article key={item} className="rounded border border-border p-5">
+              <h3 className="text-lg font-semibold">{item}</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Built for professional scholarly publishers with secure permissions and auditable actions.
+              </p>
+            </article>
+          ))}
+        </section>
+      </main>
+      <SiteFooter />
+    </>
   );
 }

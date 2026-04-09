@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { isRegistrationRole, type RegistrationRole } from "@/lib/auth/signup-roles";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -23,6 +24,7 @@ export function SignUpForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
+  const [role, setRole] = useState<RegistrationRole | "">("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
@@ -39,12 +41,21 @@ export function SignUpForm({
       return;
     }
 
+    if (!role || !isRegistrationRole(role)) {
+      setError("Please select whether you are registering as an author or a reviewer.");
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/protected`,
+          emailRedirectTo: `${window.location.origin}/auth/login`,
+          data: {
+            role,
+          },
         },
       });
       if (error) throw error;
@@ -61,11 +72,30 @@ export function SignUpForm({
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl">Sign up</CardTitle>
-          <CardDescription>Create a new account</CardDescription>
+          <CardDescription>
+            Create an account as an author or reviewer. Staff roles are assigned by your publisher.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignUp}>
             <div className="flex flex-col gap-6">
+              <div className="grid gap-2">
+                <Label htmlFor="role">I am registering as</Label>
+                <select
+                  id="role"
+                  name="role"
+                  required
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as RegistrationRole | "")}
+                  className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                >
+                  <option value="" disabled>
+                    Select role…
+                  </option>
+                  <option value="author">Author — submit manuscripts</option>
+                  <option value="reviewer">Reviewer — peer review</option>
+                </select>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="email">Email</Label>
                 <Input

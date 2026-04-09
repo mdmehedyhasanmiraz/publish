@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getRoleLandingPath } from "@/lib/auth/landing";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -33,13 +34,27 @@ export function LoginForm({
     setError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       if (error) throw error;
-      // Update this route to redirect to an authenticated route. The user already has an active session.
-      router.push("/protected");
+
+      let role =
+        (data.user?.user_metadata?.role as string | undefined) ??
+        (data.user?.app_metadata?.role as string | undefined);
+
+      // Prefer role from the profiles table when available.
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("user_id", data.user.id)
+        .maybeSingle();
+
+      if (profile?.role) role = profile.role;
+
+      router.push(getRoleLandingPath(role));
+      router.refresh();
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
