@@ -12,7 +12,7 @@ export default async function AdminArticlesPage() {
       supabase.from("journals").select("id, name").order("name"),
       supabase
         .from("articles")
-        .select("id, title, slug, status, doi, journals(name), current_version_id, submission_id")
+        .select("id, title, slug, status, doi, manuscript_reference_code, journals(name, slug), current_version_id, submission_id")
         .order("id", { ascending: false })
         .limit(200),
       supabase
@@ -86,11 +86,16 @@ export default async function AdminArticlesPage() {
           <div className="mt-3 grid gap-2">
             {fromSubmissionArticles.map((a) => {
               const j = Array.isArray(a.journals) ? a.journals[0] : a.journals;
+              const js = (j as { slug?: string } | undefined)?.slug;
+              const code = (a as { manuscript_reference_code?: string | null }).manuscript_reference_code?.trim();
+              const publicPath =
+                js && code ? `/j/${js}/article/${encodeURIComponent(code)}` : null;
               return (
                 <Link key={a.id} href={`/admin/articles/${a.id}`} className="rounded border p-3 hover:bg-muted/20">
                   <p className="font-medium">{a.title}</p>
                   <p className="text-sm text-muted-foreground">
-                    {j?.name ?? "Unknown journal"} · /j/{j?.name ?? "journal"}/article/{a.slug}
+                    {j?.name ?? "Unknown journal"}
+                    {publicPath ? ` · ${publicPath}` : " · (no public manuscript ID yet)"}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     status: {a.status} · {a.doi ? `DOI: ${a.doi}` : "No DOI"} ·{" "}
@@ -110,11 +115,16 @@ export default async function AdminArticlesPage() {
           {otherArticles.length ? (
             otherArticles.map((a) => {
               const j = Array.isArray(a.journals) ? a.journals[0] : a.journals;
+              const js = (j as { slug?: string } | undefined)?.slug;
+              const code = (a as { manuscript_reference_code?: string | null }).manuscript_reference_code?.trim();
+              const publicPath =
+                js && code ? `/j/${js}/article/${encodeURIComponent(code)}` : null;
               return (
                 <Link key={a.id} href={`/admin/articles/${a.id}`} className="rounded border p-3 hover:bg-muted/20">
                   <p className="font-medium">{a.title}</p>
                   <p className="text-sm text-muted-foreground">
-                    {j?.name ?? "Unknown journal"} · /j/{j?.name ?? "journal"}/article/{a.slug}
+                    {j?.name ?? "Unknown journal"}
+                    {publicPath ? ` · ${publicPath}` : " · (no public manuscript ID yet)"}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     status: {a.status} · {a.doi ? `DOI: ${a.doi}` : "No DOI"} ·{" "}

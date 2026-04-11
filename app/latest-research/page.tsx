@@ -3,6 +3,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
+import { publicArticlePath } from "@/lib/articles/public-article-path";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 const PAGE_SIZE = 12;
@@ -49,7 +50,7 @@ export default async function LatestResearchPage({
 
   const { data: articles } = await supabase
     .from("articles")
-    .select("id, title, slug, abstract, published_at, journals(name, slug)")
+    .select("id, title, slug, abstract, published_at, manuscript_reference_code, journals(name, slug)")
     .eq("status", "published")
     .order("published_at", { ascending: false, nullsFirst: false })
     .range(from, to);
@@ -80,6 +81,12 @@ export default async function LatestResearchPage({
             <ul className="divide-y divide-border rounded-lg border bg-white">
               {rows.map((a) => {
                 const j = journalFromRow(a.journals);
+                const manuscriptCode =
+                  typeof (a as { manuscript_reference_code?: string | null }).manuscript_reference_code === "string"
+                    ? (a as { manuscript_reference_code: string }).manuscript_reference_code.trim()
+                    : "";
+                const publicHref =
+                  j?.slug && manuscriptCode ? publicArticlePath(j.slug, manuscriptCode) : null;
                 const date =
                   a.published_at && !Number.isNaN(new Date(a.published_at as string).getTime())
                     ? new Date(a.published_at as string).toLocaleDateString(undefined, {
@@ -106,9 +113,9 @@ export default async function LatestResearchPage({
                 );
                 return (
                   <li key={a.id as string}>
-                    {j ? (
+                    {publicHref ? (
                       <Link
-                        href={`/j/${j.slug}/article/${a.slug}`}
+                        href={publicHref}
                         className="block px-4 py-5 transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                       >
                         {inner}

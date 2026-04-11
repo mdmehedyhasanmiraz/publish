@@ -2,7 +2,11 @@
 
 import { useRef, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
-import { publishArticleVersionAction, saveArticleVersionAction } from "@/lib/actions/article";
+import {
+  publishArticleVersionAction,
+  saveArticleVersionAction,
+  unpublishArticleAction,
+} from "@/lib/actions/article";
 import type { ArticleReferenceRow } from "@/lib/articles/extra-metadata";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +17,7 @@ import { ArticleWorkflowPanel } from "@/components/articles/article-workflow-pan
 import { ArticlePreview } from "@/components/articles/article-preview";
 import { SubmissionFilesPanel, type SubmissionFileRow } from "@/components/articles/submission-files-panel";
 import Link from "next/link";
+import { publicArticlePath } from "@/lib/articles/public-article-path";
 
 type Asset = {
   id: string;
@@ -224,12 +229,15 @@ export function ArticleEditorForm(props: {
   /** Admin article desk: extra navigation and context. */
   editorContext?: "default" | "admin";
   journalSlug?: string | null;
-  articleSlugForPublic?: string | null;
+  /** Manuscript reference code (public URL segment), when assigned. */
+  articleCodeForPublic?: string | null;
   journalName?: string | null;
   submissionWorkflowHref?: string | null;
+  manuscriptReferenceCode?: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [publishPending, startPublishTransition] = useTransition();
+  const [unpublishPending, startUnpublishTransition] = useTransition();
   const [importBusy, setImportBusy] = useState(false);
   const [importProgressPercent, setImportProgressPercent] = useState(0);
   const [importProgressMessage, setImportProgressMessage] = useState("");
@@ -289,9 +297,9 @@ export function ArticleEditorForm(props: {
     }))
     .filter((r) => r.text.length > 0);
 
-  const publicArticlePath =
-    props.journalSlug && props.articleSlugForPublic
-      ? `/j/${props.journalSlug}/article/${props.articleSlugForPublic}`
+  const publicArticleHref =
+    props.journalSlug && props.articleCodeForPublic?.trim()
+      ? publicArticlePath(props.journalSlug, props.articleCodeForPublic.trim())
       : null;
 
   const canPublish = ["draft", "in_review", "approved"].includes(props.workflowStatus);
@@ -313,6 +321,22 @@ export function ArticleEditorForm(props: {
     });
   }
 
+  function unpublishPublicly() {
+    if (!isPublished) return;
+    if (
+      !confirm(
+        "Unpublish this article? It will be removed from the public journal site until you publish again.",
+      )
+    ) {
+      return;
+    }
+    startUnpublishTransition(async () => {
+      const res = await unpublishArticleAction({ articleId: props.articleId, versionId: props.versionId });
+      setMessage(res.message ?? (res.ok ? "Unpublished." : "Could not unpublish."));
+      if (res.ok) window.location.reload();
+    });
+  }
+
   return (
     <div className="space-y-4">
       {props.editorContext === "admin" ? (
@@ -330,7 +354,7 @@ export function ArticleEditorForm(props: {
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={pending || publishPending || importBusy || refsImportBusy}
+                disabled={pending || publishPending || unpublishPending || importBusy || refsImportBusy}
                 onClick={save}
               >
                 {pending ? "Saving…" : "Save"}
@@ -339,11 +363,23 @@ export function ArticleEditorForm(props: {
                 type="button"
                 size="sm"
                 className="bg-teal-600 text-white shadow-sm hover:bg-teal-700"
-                disabled={publishPending || !canPublish}
+                disabled={publishPending || unpublishPending || !canPublish}
                 onClick={publishPublicly}
               >
                 {publishPending ? "Publishing…" : isPublished ? "Published" : "Publish"}
               </Button>
+              {isPublished ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="border-amber-300 text-amber-900 hover:bg-amber-50"
+                  disabled={unpublishPending || publishPending || importBusy || refsImportBusy}
+                  onClick={unpublishPublicly}
+                >
+                  {unpublishPending ? "Unpublishing…" : "Unpublish"}
+                </Button>
+              ) : null}
               <Button type="button" variant="outline" size="sm" asChild>
                 <Link href="/admin/articles">All articles</Link>
               </Button>
@@ -352,17 +388,17 @@ export function ArticleEditorForm(props: {
                   <Link href={props.submissionWorkflowHref}>Submission workflow</Link>
                 </Button>
               ) : null}
-              {publicArticlePath ? (
+              {publicArticleHref ? (
                 <Button type="button" variant="outline" size="sm" asChild>
-                  <Link href={publicArticlePath} target="_blank" rel="noreferrer">
+                  <Link href={publicArticleHref} target="_blank" rel="noreferrer">
                     Public article URL
                   </Link>
                 </Button>
               ) : null}
             </div>
           </div>
-          {publicArticlePath ? (
-            <p className="mt-3 font-mono text-xs text-muted-foreground break-all">{publicArticlePath}</p>
+          {publicArticleHref ? (
+            <p className="mt-3 font-mono text-xs text-muted-foreground break-all">{publicArticleHref}</p>
           ) : null}
         </section>
       ) : null}
@@ -770,6 +806,7 @@ export function ArticleEditorForm(props: {
         articleId={props.articleId}
         versionId={props.versionId}
         workflowStatus={props.workflowStatus}
+        manuscriptReferenceCode={props.manuscriptReferenceCode}
       />
 
       <section className="rounded-lg border bg-white p-5">

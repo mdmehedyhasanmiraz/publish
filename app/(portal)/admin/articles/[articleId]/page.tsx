@@ -33,7 +33,9 @@ export default async function AdminArticleEditPage({
 
   const { data: article, error: articleErr } = await supabase
     .from("articles")
-    .select("id, title, slug, doi, abstract, keywords, issue_id, current_version_id, submission_id, journals(slug, name)")
+    .select(
+      "id, title, slug, doi, abstract, keywords, issue_id, current_version_id, submission_id, status, published_at, manuscript_reference_code, journals(slug, name)",
+    )
     .eq("id", articleId)
     .maybeSingle();
 
@@ -141,9 +143,14 @@ export default async function AdminArticleEditPage({
         initialReferences={extra.references}
         editorContext="admin"
         journalSlug={journalSlug}
-        articleSlugForPublic={(article.slug as string) ?? ""}
+        articleCodeForPublic={
+          (article as { manuscript_reference_code?: string | null }).manuscript_reference_code?.trim() || null
+        }
         journalName={(journal as { name?: string } | null)?.name ?? null}
         submissionWorkflowHref={submissionId ? `/admin/submissions/${submissionId}` : null}
+        manuscriptReferenceCode={
+          (article as { manuscript_reference_code?: string | null }).manuscript_reference_code?.trim() || null
+        }
       />
     </div>
   );

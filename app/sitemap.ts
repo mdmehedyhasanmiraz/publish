@@ -68,14 +68,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const { data: articleRows } = await supabase
     .from("articles")
-    .select("slug, journal_id, published_at")
+    .select("manuscript_reference_code, journal_id, published_at")
     .eq("status", "published");
 
   for (const row of articleRows ?? []) {
     const js = slugByJournalId.get(String(row.journal_id));
-    if (!js || !row.slug) continue;
+    const code =
+      typeof row.manuscript_reference_code === "string" ? row.manuscript_reference_code.trim() : "";
+    if (!js || !code) continue;
     entries.push({
-      url: `${base}/j/${js}/article/${row.slug}`,
+      url: `${base}/j/${js}/article/${encodeURIComponent(code)}`,
       lastModified: row.published_at ? new Date(row.published_at as string) : new Date(),
       changeFrequency: "monthly",
       priority: 0.6,

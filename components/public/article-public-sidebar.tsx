@@ -3,9 +3,19 @@ import Link from "next/link";
 import type { ArticleTocItem } from "@/lib/articles/markdown";
 import { CC_BY_4_0_URL, CcByLicenseBadge } from "@/components/public/cc-by-license-badge";
 
-export function ArticlePublicSidebar(props: { tocItems: ArticleTocItem[] }) {
+export function ArticlePublicSidebar(props: {
+  tocItems: ArticleTocItem[];
+  manuscriptReferenceCode?: string | null;
+}) {
   return (
     <aside className="space-y-8 border-t border-border pt-8 lg:sticky lg:top-24 lg:self-start lg:border-t-0 lg:pt-0">
+      {props.manuscriptReferenceCode ? (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Manuscript ID</p>
+          <p className="mt-2 font-mono text-sm text-foreground [overflow-wrap:anywhere]">{props.manuscriptReferenceCode}</p>
+        </div>
+      ) : null}
+
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">On this page</p>
         {props.tocItems.length > 0 ? (

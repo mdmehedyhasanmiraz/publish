@@ -15,8 +15,26 @@ import {
   runImportArticleBodyFromSubmission,
   type ImportManuscriptBodyResult,
 } from "@/lib/manuscript/import-article-body-from-submission";
+import { publicArticlePath } from "@/lib/articles/public-article-path";
 
 type ActionResult = { ok: boolean; message?: string };
+
+async function revalidatePublicArticlePageForArticleId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  articleId: string,
+) {
+  const { data: a } = await supabase
+    .from("articles")
+    .select("manuscript_reference_code, journal_id")
+    .eq("id", articleId)
+    .maybeSingle();
+  const code =
+    typeof a?.manuscript_reference_code === "string" ? a.manuscript_reference_code.trim() : "";
+  if (!a?.journal_id || !code) return;
+  const { data: j } = await supabase.from("journals").select("slug").eq("id", a.journal_id).maybeSingle();
+  if (!j?.slug) return;
+  revalidatePath(publicArticlePath(j.slug, code));
+}
 
 type EditorAuth = { ok: true; supabase: Awaited<ReturnType<typeof createClient>>; userId: string };
 
@@ -289,7 +307,8 @@ export async function saveArticleVersionAction(input: {
 
   revalidatePath(`/admin/articles/${input.articleId}`);
   revalidatePath(`/editor/articles/${input.articleId}`);
-  revalidatePath(`/j/[journalSlug]/article/[articleSlug]`, "page");
+  await revalidatePublicArticlePageForArticleId(supabase, input.articleId);
+  revalidatePath("/latest-research");
   return { ok: true as const, message: "Article saved." };
 }
 
@@ -339,6 +358,7 @@ export async function uploadArticleAssetAction(input: {
 
   revalidatePath(`/admin/articles/${input.articleId}`);
   revalidatePath(`/editor/articles/${input.articleId}`);
+  await revalidatePublicArticlePageForArticleId(supabase, input.articleId);
   return { ok: true as const, assetId: row?.id };
 }
 
@@ -363,6 +383,7 @@ export async function removeArticleAssetAction(input: { assetId: string }): Prom
   if (error) return { ok: false, message: error.message };
   revalidatePath(`/admin/articles/${asset.article_id}`);
   revalidatePath(`/editor/articles/${asset.article_id}`);
+  await revalidatePublicArticlePageForArticleId(supabase, asset.article_id);
   return { ok: true, message: "Asset removed." };
 }
 
@@ -435,6 +456,9 @@ async function setWorkflowStatus(input: {
   const { error: aErr } = await supabase.from("articles").update(articlePatch).eq("id", input.articleId);
   if (aErr) return { ok: false as const, message: aErr.message };
 
+  // manuscript_reference_code is assigned in the database (see trg_articles_assign_manuscript_reference
+  // in migration 31_manuscript_reference_code.sql) when status becomes published. It is not cleared on unpublish.
+
   await supabase.from("article_workflow_events").insert({
     article_id: input.articleId,
     version_id: input.versionId,
@@ -445,13 +469,7 @@ async function setWorkflowStatus(input: {
 
   revalidatePath(`/admin/articles/${input.articleId}`);
   revalidatePath(`/editor/articles/${input.articleId}`);
-  if (input.nextStatus === "published") {
-    const { data: a } = await supabase.from("articles").select("slug, journal_id").eq("id", input.articleId).maybeSingle();
-    if (a?.slug && a.journal_id) {
-      const { data: j } = await supabase.from("journals").select("slug").eq("id", a.journal_id).maybeSingle();
-      if (j?.slug) revalidatePath(`/j/${j.slug}/article/${a.slug}`);
-    }
-  }
+  await revalidatePublicArticlePageForArticleId(supabase, input.articleId);
   revalidatePath("/latest-research");
   return { ok: true as const, message: "Workflow updated." };
 }

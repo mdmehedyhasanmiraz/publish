@@ -44,9 +44,9 @@ function safeFilenameSlug(slug: string): string {
   return s || "article";
 }
 
-export function ArticleCiteButton(props: { work: CitationWork; articleSlug: string }) {
-  const { work, articleSlug } = props;
-  const base = safeFilenameSlug(articleSlug);
+export function ArticleCiteButton(props: { work: CitationWork; citationDownloadBaseName: string }) {
+  const { work, citationDownloadBaseName } = props;
+  const base = safeFilenameSlug(citationDownloadBaseName);
   const [open, setOpen] = useState(false);
   const [style, setStyle] = useState<CitationStyleId>("apa");
   const [copied, setCopied] = useState(false);

@@ -16,41 +16,56 @@ import { parseArticleExtraMetadata } from "@/lib/articles/extra-metadata";
 import { buildCitationWork } from "@/lib/articles/citation-formats";
 import { getPublicSiteUrl } from "@/lib/site-url";
 import { ArticleCiteButton } from "@/components/public/article-cite-button";
+import { normalizeManuscriptReferenceCodeParam, publicArticlePath } from "@/lib/articles/public-article-path";
 
-type Props = { params: Promise<{ journalSlug: string; articleSlug: string }> };
+type Props = { params: Promise<{ journalSlug: string; articleCode: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { journalSlug, articleSlug } = await params;
+  const { journalSlug, articleCode: articleCodeRaw } = await params;
+  const articleCode = normalizeManuscriptReferenceCodeParam(articleCodeRaw);
   const supabase = await createClient();
+
+  const { data: journal } = await supabase.from("journals").select("id").eq("slug", journalSlug).maybeSingle();
+  if (!journal?.id) {
+    return { title: `${articleCodeRaw} | Sciencelet` };
+  }
+
   const { data: article } = await supabase
     .from("articles")
     .select("title")
-    .eq("slug", articleSlug)
-    .in("status", ["published"])
-    .eq("journals.slug", journalSlug)
+    .eq("journal_id", journal.id)
+    .eq("manuscript_reference_code", articleCode)
+    .eq("status", "published")
     .maybeSingle();
-  return { title: `${article?.title ?? articleSlug} | Sciencelet` };
+
+  return { title: `${(article?.title as string) ?? articleCodeRaw} | Sciencelet` };
 }
 
 export default async function ArticlePage({ params }: Props) {
-  const { journalSlug, articleSlug } = await params;
+  const { journalSlug, articleCode: articleCodeRaw } = await params;
+  const articleCode = normalizeManuscriptReferenceCodeParam(articleCodeRaw);
   const supabase = await createClient();
+
+  const { data: journal } = await supabase
+    .from("journals")
+    .select("id, name, slug, cover_image_path")
+    .eq("slug", journalSlug)
+    .maybeSingle();
+  if (!journal?.id) notFound();
 
   const { data: article } = await supabase
     .from("articles")
-    .select(
-      "id, title, slug, doi, abstract, keywords, published_at, status, current_version_id, public_submitted_at, public_revised_at, public_accepted_at, public_submission_type, journals(name, slug, cover_image_path), submission_id",
-    )
-    .eq("slug", articleSlug)
+    .select("*")
+    .eq("journal_id", journal.id)
+    .eq("manuscript_reference_code", articleCode)
     .eq("status", "published")
-    .eq("journals.slug", journalSlug)
     .maybeSingle();
-  if (!article) notFound();
+  if (!article?.current_version_id) notFound();
 
   const { data: version } = await supabase
     .from("article_versions")
     .select("id, title, abstract, markdown_body, workflow_status, extra_metadata")
-    .eq("id", article.current_version_id)
+    .eq("id", article.current_version_id as string)
     .eq("workflow_status", "published")
     .maybeSingle();
   if (!version) notFound();
@@ -72,8 +87,7 @@ export default async function ArticlePage({ params }: Props) {
   const authorAffiliations: PublicArticleAuthorRow[] = Array.isArray(submission?.author_affiliations)
     ? (submission.author_affiliations as PublicArticleAuthorRow[])
     : [];
-  const journal = Array.isArray(article.journals) ? article.journals[0] : article.journals;
-  const coverSrc = publicCoverUrl((journal as { cover_image_path?: string | null } | null)?.cover_image_path ?? null);
+  const coverSrc = publicCoverUrl(journal.cover_image_path ?? null);
 
   const { html: bodyHtml, toc: bodyToc } = renderArticleMarkdownToHtmlWithToc(
     (version.markdown_body as string) ?? "",
@@ -97,12 +111,15 @@ export default async function ArticlePage({ params }: Props) {
   const articleTypeLabel = submissionTypeDisplay(article.public_submission_type as string | null | undefined);
 
   const articleTitle = ((version.title as string) || (article.title as string)).trim();
+  const refCode = String(article.manuscript_reference_code ?? "").trim();
+  const canonicalPath = publicArticlePath(journalSlug, refCode || articleCode);
+
   const citationWork = buildCitationWork({
     title: articleTitle,
-    journalName: (journal?.name as string) || journalSlug,
+    journalName: journal.name || journalSlug,
     publishedAt: article.published_at as string | null,
     doi: doiDisplay,
-    articleUrl: `${getPublicSiteUrl()}/j/${journalSlug}/article/${article.slug as string}`,
+    articleUrl: `${getPublicSiteUrl()}${canonicalPath}`,
     authors: authorAffiliations,
   });
 
@@ -111,7 +128,7 @@ export default async function ArticlePage({ params }: Props) {
       <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between md:gap-6">
         <div className="min-w-0 max-w-3xl flex-1 space-y-3">
           <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[0.65rem] text-muted-foreground">
-            <span className="font-semibold uppercase tracking-[0.16em]">{journal?.name ?? journalSlug}</span>
+            <span className="font-semibold uppercase tracking-[0.16em]">{journal.name ?? journalSlug}</span>
             {articleTypeLabel ? (
               <>
                 <span className="select-none font-semibold text-muted-foreground/80" aria-hidden>
@@ -137,7 +154,13 @@ export default async function ArticlePage({ params }: Props) {
                 )}
               </div>
             ) : null}
-            <ArticleCiteButton work={citationWork} articleSlug={article.slug as string} />
+            {refCode ? (
+              <div>
+                <span className="font-medium text-foreground">Manuscript ID: </span>
+                <span className="font-mono">{refCode}</span>
+              </div>
+            ) : null}
+            <ArticleCiteButton work={citationWork} citationDownloadBaseName={refCode || articleCode} />
           </div>
           {authorAffiliations.length > 0 ? <ArticlePublicByline authors={authorAffiliations} /> : null}
           <ArticlePublicationTimeline
@@ -155,7 +178,7 @@ export default async function ArticlePage({ params }: Props) {
         </div>
         <JournalCoverImage
           src={coverSrc}
-          alt={`${journal?.name ?? journalSlug} cover`}
+          alt={`${journal.name ?? journalSlug} cover`}
           className="aspect-[3/4] w-full max-w-[140px] shrink-0 self-start sm:max-w-[168px] md:max-w-[192px]"
           sizes="(max-width: 768px) 168px, 192px"
         />
@@ -200,7 +223,7 @@ export default async function ArticlePage({ params }: Props) {
           ) : null}
         </div>
 
-        <ArticlePublicSidebar tocItems={tocItems} />
+        <ArticlePublicSidebar tocItems={tocItems} manuscriptReferenceCode={refCode || null} />
       </div>
 
       <footer className="mt-10 border-t border-border pt-6">

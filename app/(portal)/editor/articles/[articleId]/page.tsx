@@ -33,13 +33,15 @@ export default async function EditorArticleEditPage({
 
   const { data: article, error: articleErr } = await supabase
     .from("articles")
-    .select("id, title, slug, doi, abstract, keywords, issue_id, current_version_id, submission_id")
+    .select("*, journals(slug)")
     .eq("id", articleId)
     .maybeSingle();
 
   if (articleErr || !article) notFound();
 
   const submissionId = (article.submission_id as string | null | undefined) ?? null;
+  const journalRow = Array.isArray(article.journals) ? article.journals[0] : article.journals;
+  const journalSlugForEditor = (journalRow as { slug?: string } | null)?.slug ?? null;
   const submissionFiles = submissionId ? await loadSubmissionFilesForEditor(supabase, submissionId) : [];
 
   let version: ArticleVersionRow | null = null;
@@ -143,6 +145,13 @@ export default async function EditorArticleEditPage({
           initialCompetingInterests={extra.competing_interests ?? ""}
           initialReferences={extra.references}
           submissionWorkflowHref={submissionId ? `/editor/submissions/${submissionId}` : null}
+          journalSlug={journalSlugForEditor}
+          articleCodeForPublic={
+            (article as { manuscript_reference_code?: string | null }).manuscript_reference_code?.trim() || null
+          }
+          manuscriptReferenceCode={
+            (article as { manuscript_reference_code?: string | null }).manuscript_reference_code?.trim() || null
+          }
         />
       </div>
     </div>

@@ -13,6 +13,7 @@ export function ArticleWorkflowPanel(props: {
   articleId: string;
   versionId: string;
   workflowStatus: string;
+  manuscriptReferenceCode?: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState("");
@@ -34,6 +35,12 @@ export function ArticleWorkflowPanel(props: {
           <span className="ml-2 rounded bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800">Public</span>
         ) : null}
       </p>
+      {props.manuscriptReferenceCode ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          Manuscript ID:{" "}
+          <span className="font-mono font-medium text-foreground">{props.manuscriptReferenceCode}</span>
+        </p>
+      ) : null}
       <div className="mt-3 flex flex-wrap gap-2">
         <Button
           size="sm"

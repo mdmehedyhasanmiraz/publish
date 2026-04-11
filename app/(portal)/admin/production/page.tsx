@@ -12,7 +12,7 @@ export default async function AdminProductionPage() {
       .limit(100),
     supabase
       .from("articles")
-      .select("id, title, slug, status, journals(name), issues(issue_slug)")
+      .select("id, title, slug, status, manuscript_reference_code, journals(name, slug), issues(issue_slug)")
       .order("id", { ascending: false })
       .limit(100),
   ]);
@@ -51,12 +51,17 @@ export default async function AdminProductionPage() {
           {(articles ?? []).length ? (
             (articles ?? []).map((a) => {
               const j = Array.isArray(a.journals) ? a.journals[0] : a.journals;
+              const js = (j as { slug?: string } | undefined)?.slug;
+              const code = (a as { manuscript_reference_code?: string | null }).manuscript_reference_code?.trim();
+              const publicPath =
+                js && code ? `/j/${js}/article/${encodeURIComponent(code)}` : null;
               const i = Array.isArray(a.issues) ? a.issues[0] : a.issues;
               return (
                 <div key={a.id} className="rounded border p-3">
                   <p className="font-medium">{a.title}</p>
                   <p className="text-sm text-muted-foreground">
-                    /j/{j?.name ?? "journal"}/article/{a.slug} · {a.status} {i?.issue_slug ? `· ${i.issue_slug}` : ""}
+                    {publicPath ?? "(no public manuscript ID)"} · {a.status}{" "}
+                    {i?.issue_slug ? `· ${i.issue_slug}` : ""}
                   </p>
                 </div>
               );
