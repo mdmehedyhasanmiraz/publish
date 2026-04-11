@@ -26,7 +26,15 @@ function sanitizeSupSubFromImport(tag: string): string {
   return `<${m[1].toLowerCase()}>${escapeHtml(inner)}</${m[1].toLowerCase()}>`;
 }
 
-/** Inline Markdown plus numeric citations like [1], [2] → anchor to #reference-n. Supports &lt;sup&gt;/&lt;sub&gt; from imports. */
+function isSafeArticleHref(url: string): boolean {
+  const u = url.trim();
+  if (!u) return false;
+  if (u.startsWith("#") || u.startsWith("/")) return true;
+  const lower = u.toLowerCase();
+  return lower.startsWith("https:") || lower.startsWith("http:") || lower.startsWith("mailto:");
+}
+
+/** Inline Markdown: [label](url), numeric citations [1] → #reference-n, **bold**, *italic*, `code`. Supports &lt;sup&gt;/&lt;sub&gt; from imports. */
 function renderRichInline(text: string) {
   const preserved: string[] = [];
   const s = text.replace(/<(sup|sub)\b[^>]*>[\s\S]*?<\/\1>/gi, (full) => {
@@ -35,18 +43,38 @@ function renderRichInline(text: string) {
     return `\x00SUPSUB:${i}\x00`;
   });
 
-  const parts = s.split(/(\[\d+\])/g);
-  const rendered = parts
-    .map((part) => {
-      const m = part.match(/^\[(\d+)\]$/);
-      if (m) {
-        const n = m[1];
+  type Piece =
+    | { kind: "text"; v: string }
+    | { kind: "cite"; n: string }
+    | { kind: "link"; label: string; url: string };
+  const pieces: Piece[] = [];
+  const re = /\[([^\]]+)\]\(([^)]+)\)|\[(\d+)\]/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s)) !== null) {
+    if (m.index > last) pieces.push({ kind: "text", v: s.slice(last, m.index) });
+    if (m[3] !== undefined) pieces.push({ kind: "cite", n: m[3] });
+    else pieces.push({ kind: "link", label: m[1] ?? "", url: (m[2] ?? "").trim() });
+    last = m.index + m[0].length;
+  }
+  if (last < s.length) pieces.push({ kind: "text", v: s.slice(last) });
+
+  const renderTextChunk = (v: string) =>
+    escapeHtml(v)
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*(.+?)\*/g, "<em>$1</em>")
+      .replace(/`(.+?)`/g, "<code>$1</code>");
+
+  const rendered = pieces
+    .map((p) => {
+      if (p.kind === "text") return renderTextChunk(p.v);
+      if (p.kind === "cite") {
+        const n = p.n;
         return `<sup class="align-super text-[0.75em]"><a href="#reference-${escapeHtml(n)}" class="text-primary underline decoration-primary/60 underline-offset-2">[${escapeHtml(n)}]</a></sup>`;
       }
-      return escapeHtml(part)
-        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-        .replace(/\*(.+?)\*/g, "<em>$1</em>")
-        .replace(/`(.+?)`/g, "<code>$1</code>");
+      const labelHtml = renderTextChunk(p.label);
+      if (!isSafeArticleHref(p.url)) return labelHtml;
+      return `<a href="${escapeHtml(p.url)}" class="text-primary underline decoration-primary/60 underline-offset-2" rel="noopener noreferrer">${labelHtml}</a>`;
     })
     .join("");
 
@@ -108,17 +136,18 @@ function allocateHeadingId(rawTitle: string, usedBaseCounts: Map<string, number>
 /** Outline entries are section-level (`##` in Markdown); Abstract/References on the article page use the same shape. */
 export type ArticleTocItem = { level: 2; id: string; text: string };
 
-function renderShortcodeMatch(asset: ArticleAsset | undefined) {
+function renderShortcodeMatch(assetKey: string, asset: ArticleAsset | undefined) {
+  const fragId = escapeHtml(`figure-${assetKey}`);
   if (!asset) return `<span class="text-red-600">Missing asset</span>`;
   if (asset.asset_type === "figure") {
     if (!asset.storage_path) return `<span class="text-red-600">Missing figure file</span>`;
-    return `<figure class="my-6"><img src="/api/article-asset?path=${encodeURIComponent(asset.storage_path)}" alt="${escapeHtml(
+    return `<figure id="${fragId}" class="my-6 scroll-mt-24"><img src="/api/article-asset?path=${encodeURIComponent(asset.storage_path)}" alt="${escapeHtml(
       asset.alt_text ?? "",
     )}" class="max-h-[480px] w-auto rounded border" /><figcaption class="mt-2 text-sm text-slate-600">${renderRichInline(
       asset.caption ?? "",
     )}</figcaption></figure>`;
   }
-  return `<figure class="my-6">${renderTableMarkdown(asset.table_markdown ?? "")}<figcaption class="mt-2 text-sm text-slate-600">${renderRichInline(
+  return `<figure id="${fragId}" class="my-6 scroll-mt-24">${renderTableMarkdown(asset.table_markdown ?? "")}<figcaption class="mt-2 text-sm text-slate-600">${renderRichInline(
     asset.caption ?? "",
   )}</figcaption></figure>`;
 }
@@ -152,7 +181,7 @@ export function renderArticleMarkdownToHtmlWithToc(
     if (shortcode) {
       flushParagraph();
       const key = shortcode[2];
-      blocks.push(renderShortcodeMatch(assetMap.get(key)));
+      blocks.push(renderShortcodeMatch(key, assetMap.get(key)));
       continue;
     }
     if (line.startsWith("### ")) {

@@ -1,13 +1,6 @@
 import type { MetadataRoute } from "next";
 import { createClient } from "@/lib/supabase/server";
-
-/** Crawlable site URL (no trailing slash). */
-function getBaseUrl(): string {
-  const u = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
-  if (u) return u;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return "http://localhost:3000";
-}
+import { getPublicSiteUrl } from "@/lib/site-url";
 
 const STATIC_PATHS = [
   "/",
@@ -34,7 +27,7 @@ const STATIC_PATHS = [
 export const revalidate = 3600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const base = getBaseUrl();
+  const base = getPublicSiteUrl();
   const entries: MetadataRoute.Sitemap = STATIC_PATHS.map((path) => ({
     url: path === "/" ? `${base}/` : `${base}${path}`,
     lastModified: new Date(),

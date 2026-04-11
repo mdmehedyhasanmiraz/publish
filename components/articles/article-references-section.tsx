@@ -7,6 +7,7 @@ import {
   normalizeDoi,
 } from "@/lib/articles/reference-links";
 import { ebGaramond } from "@/lib/fonts/eb-garamond";
+import { stixTwoText } from "@/lib/fonts/stix-two-text";
 import { cn } from "@/lib/utils";
 
 function crossrefQueryForRef(r: ArticleReferenceRow): string {
@@ -23,7 +24,7 @@ function scholarUrlForRef(r: ArticleReferenceRow): string {
 export function ArticleReferencesSection(props: {
   references: ArticleReferenceRow[];
   /** Match public article typography */
-  paragraphFont?: "inherit" | "eb-garamond";
+  paragraphFont?: "inherit" | "eb-garamond" | "stix-two-text";
   className?: string;
 }) {
   const { references, paragraphFont = "inherit", className } = props;
@@ -35,6 +36,7 @@ export function ArticleReferencesSection(props: {
       className={cn(
         "scroll-mt-24 not-prose border-t border-border pt-8",
         paragraphFont === "eb-garamond" && ebGaramond.variable,
+        paragraphFont === "stix-two-text" && stixTwoText.variable,
         className,
       )}
     >
@@ -44,6 +46,8 @@ export function ArticleReferencesSection(props: {
           "mt-4 list-decimal space-y-5 pl-6 text-slate-800",
           paragraphFont === "eb-garamond" &&
             "[&_p]:[font-family:var(--font-eb-garamond),Georgia,serif]",
+          paragraphFont === "stix-two-text" &&
+            "[&_p]:[font-family:var(--font-stix-two-text),Georgia,serif]",
         )}
       >
         {references.map((r, i) => {

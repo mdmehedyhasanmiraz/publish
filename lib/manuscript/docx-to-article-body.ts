@@ -19,8 +19,112 @@ function escapeHtmlInner(s: string) {
     .replaceAll("'", "&#39;");
 }
 
+/** Unwrap bold/italic HTML to ** / * markers (no recursion — iterative passes on the whole string). */
+function unwrapBoldItalicHtml(x: string): string {
+  let t = x;
+  for (let pass = 0; pass < 12; pass++) {
+    const next = t
+      .replace(/<strong\b[^>]*>([\s\S]*?)<\/strong>/gi, (_, a: string) => `**${a}**`)
+      .replace(/<b\b[^>]*>([\s\S]*?)<\/b>/gi, (_, a: string) => `**${a}**`)
+      .replace(/<em\b[^>]*>([\s\S]*?)<\/em>/gi, (_, a: string) => `*${a}*`)
+      .replace(/<i\b[^>]*>([\s\S]*?)<\/i>/gi, (_, a: string) => `*${a}*`);
+    if (next === t) break;
+    t = next;
+  }
+  return t;
+}
+
+function sanitizeMarkdownLinkLabel(label: string): string {
+  const t = label.replace(/\[/g, "").replace(/\]/g, "").trim();
+  return t || label.trim();
+}
+
+function hrefToImportedMarkdownUrl(href: string): string | null {
+  const u = decodeBasicEntities(href.trim());
+  if (!u) return null;
+  const lower = u.toLowerCase();
+  if (lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("mailto:")) return u;
+  if (u.startsWith("#") || u.startsWith("/")) return u;
+  if (lower.startsWith("www.")) return `https://${u}`;
+  return null;
+}
+
+/** Turn Mammoth &lt;a href&gt; into Markdown links before other tags are stripped. */
+function replaceHtmlAnchorsWithMarkdown(html: string): string {
+  const anchorRe =
+    /<a\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>([\s\S]*?)<\/a>/gi;
+  return html.replace(anchorRe, (_full, dq: string, sq: string, bare: string, inner: string) => {
+    const rawHref = (dq ?? sq ?? bare ?? "").trim();
+    const url = hrefToImportedMarkdownUrl(rawHref);
+    let label = unwrapBoldItalicHtml(inner).replace(/<[^>]+>/g, "");
+    label = decodeBasicEntities(label).replace(/\s+/g, " ").trim();
+    if (!url) {
+      return label;
+    }
+    if (!label) label = url;
+    label = sanitizeMarkdownLinkLabel(label);
+    return `[${label}](${url})`;
+  });
+}
+
+const MARKDOWN_LINK_SPLIT = /(\[[^\]]+\]\([^)]+\))/g;
+
+function trimTrailingUrlPunct(url: string): { core: string; tail: string } {
+  const m = url.match(/^(.+?)([.,;:!?)]+)$/);
+  if (!m) return { core: url, tail: "" };
+  const core = m[1] ?? url;
+  const tail = m[2] ?? "";
+  if (/https?:\/\//i.test(core)) return { core, tail };
+  return { core: url, tail: "" };
+}
+
+/** Link bare http(s) and www. URLs in text that is not already inside a Markdown link. */
+function linkifyBareUrlsInMarkdown(md: string): string {
+  return md.split(MARKDOWN_LINK_SPLIT).map((chunk, i) => {
+    if (i % 2 === 1) return chunk;
+    return chunk
+      .replace(/\b(https?:\/\/[^\s<>\[\]"']+)/gi, (raw) => {
+        const { core, tail } = trimTrailingUrlPunct(raw);
+        if (!/^https?:\/\//i.test(core)) return raw;
+        return `[${core}](${core})${tail}`;
+      })
+      .replace(/\b(www\.[^\s<>\[\]"']+)/gi, (raw) => {
+        const { core, tail } = trimTrailingUrlPunct(raw);
+        const dest = core.toLowerCase().startsWith("www.") ? `https://${core}` : core;
+        return `[${core}](${dest})${tail}`;
+      });
+  }).join("");
+}
+
 /**
- * Inline HTML from Mammoth → markdown-ish line with **bold**, *italic*, and literal &lt;sup&gt;/&lt;sub&gt; kept.
+ * Link "Figure 1" / "Fig. 1" / "Table 2" to fragment ids on rendered figures (`figure-fig-1`, `figure-tbl-1`, …).
+ */
+function linkFigureAndTableMentions(md: string): string {
+  return md.split(MARKDOWN_LINK_SPLIT).map((chunk, i) => {
+    if (i % 2 === 1) return chunk;
+    let c = chunk;
+    c = c.replace(/\b(Figure\s+(\d+[a-zA-Z]*))\b/gi, (match, _g1: string, num: string) => {
+      return `[${match}](#figure-fig-${num.toLowerCase()})`;
+    });
+    c = c.replace(/\b(Fig\.\s*(\d+[a-zA-Z]*))\b/gi, (match, _label, num: string) => {
+      return `[${match}](#figure-fig-${num.toLowerCase()})`;
+    });
+    c = c.replace(/\b(Fig\s+(\d+[a-zA-Z]*))\b/gi, (match, _label, num: string) => {
+      return `[${match}](#figure-fig-${num.toLowerCase()})`;
+    });
+    c = c.replace(/\b(Table\s+(\d+[a-zA-Z]*))\b/gi, (match, _label, num: string) => {
+      return `[${match}](#figure-tbl-${num.toLowerCase()})`;
+    });
+    return c;
+  }).join("");
+}
+
+function enrichImportedArticleMarkdownLine(line: string): string {
+  return linkFigureAndTableMentions(linkifyBareUrlsInMarkdown(line));
+}
+
+/**
+ * Inline HTML from Mammoth → markdown-ish line with **bold**, *italic*, literal &lt;sup&gt;/&lt;sub&gt;, and [text](url) for hyperlinks.
  */
 function inlineHtmlToArticleLine(html: string): string {
   let s = html.trim();
@@ -35,27 +139,15 @@ function inlineHtmlToArticleLine(html: string): string {
     return `\uE000${idx}\uE000`;
   });
 
-  const unwrap = (x: string) => {
-    let t = x;
-    for (let i = 0; i < 12; i++) {
-      const next = t
-        .replace(/<strong\b[^>]*>([\s\S]*?)<\/strong>/gi, (_, a) => `**${unwrap(a)}**`)
-        .replace(/<b\b[^>]*>([\s\S]*?)<\/b>/gi, (_, a) => `**${unwrap(a)}**`)
-        .replace(/<em\b[^>]*>([\s\S]*?)<\/em>/gi, (_, a) => `*${unwrap(a)}*`)
-        .replace(/<i\b[^>]*>([\s\S]*?)<\/i>/gi, (_, a) => `*${unwrap(a)}*`);
-      if (next === t) break;
-      t = next;
-    }
-    return t;
-  };
-  s = unwrap(s);
+  s = replaceHtmlAnchorsWithMarkdown(s);
+  s = unwrapBoldItalicHtml(s);
 
   s = s.replace(/<[^>]+>/g, "");
   s = decodeBasicEntities(s);
 
   s = s.replace(/\uE000(\d+)\uE000/g, (_, i) => preserved[Number(i)] ?? "");
 
-  return s.replace(/\s+/g, " ").trim();
+  return enrichImportedArticleMarkdownLine(s.replace(/\s+/g, " ").trim());
 }
 
 /**
@@ -130,7 +222,7 @@ export function mammothHtmlToArticleMarkdown(html: string): string {
   }
 
   if (out.length === 0) {
-    const fallback = inlineHtmlToArticleLine(h.replace(/<[^>]+>/g, " "));
+    const fallback = inlineHtmlToArticleLine(h);
     return fallback || "";
   }
 

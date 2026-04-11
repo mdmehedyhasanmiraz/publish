@@ -13,6 +13,9 @@ import { publicCoverUrl } from "@/lib/storage/covers";
 import type { ArticleTocItem } from "@/lib/articles/markdown";
 import { renderArticleMarkdownToHtmlWithToc } from "@/lib/articles/markdown";
 import { parseArticleExtraMetadata } from "@/lib/articles/extra-metadata";
+import { buildCitationWork } from "@/lib/articles/citation-formats";
+import { getPublicSiteUrl } from "@/lib/site-url";
+import { ArticleCiteButton } from "@/components/public/article-cite-button";
 
 type Props = { params: Promise<{ journalSlug: string; articleSlug: string }> };
 
@@ -97,6 +100,16 @@ export default async function ArticlePage({ params }: Props) {
 
   const articleTypeLabel = submissionTypeDisplay(article.public_submission_type as string | null | undefined);
 
+  const articleTitle = ((version.title as string) || (article.title as string)).trim();
+  const citationWork = buildCitationWork({
+    title: articleTitle,
+    journalName: (journal?.name as string) || journalSlug,
+    publishedAt: article.published_at as string | null,
+    doi: doiDisplay,
+    articleUrl: `${getPublicSiteUrl()}/j/${journalSlug}/article/${article.slug as string}`,
+    authors: authorAffiliations,
+  });
+
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between md:gap-6">
@@ -115,19 +128,20 @@ export default async function ArticlePage({ params }: Props) {
           <h1 className="text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl">
             {(version.title as string) || (article.title as string)}
           </h1>
-          <div className="text-xs leading-relaxed">
-            <span className="font-medium text-foreground">DOI: </span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs leading-relaxed">
             {doiDisplay ? (
-              doiLink && /^https?:\/\//i.test(doiLink) ? (
-                <a href={doiLink} className="text-primary underline-offset-2 hover:underline" target="_blank" rel="noreferrer">
-                  {doiDisplay}
-                </a>
-              ) : (
-                <span>{doiDisplay}</span>
-              )
-            ) : (
-              <span className="text-muted-foreground">Pending DOI</span>
-            )}
+              <div>
+                <span className="font-medium text-foreground">DOI: </span>
+                {doiLink && /^https?:\/\//i.test(doiLink) ? (
+                  <a href={doiLink} className="text-primary underline-offset-2 hover:underline" target="_blank" rel="noreferrer">
+                    {doiDisplay}
+                  </a>
+                ) : (
+                  <span>{doiDisplay}</span>
+                )}
+              </div>
+            ) : null}
+            <ArticleCiteButton work={citationWork} articleSlug={article.slug as string} />
           </div>
           {authorAffiliations.length > 0 ? <ArticlePublicByline authors={authorAffiliations} /> : null}
           <ArticlePublicationTimeline
@@ -164,7 +178,7 @@ export default async function ArticlePage({ params }: Props) {
               markdownBody={(version.markdown_body as string) ?? ""}
               bodyHtml={bodyHtml}
               assets={(assets ?? []) as never}
-              paragraphFont="eb-garamond"
+              paragraphFont="stix-two-text"
             />
           </section>
 
@@ -172,7 +186,7 @@ export default async function ArticlePage({ params }: Props) {
             <section className="rounded-lg border bg-white p-6">
               <ArticleReferencesSection
                 references={extra.references}
-                paragraphFont="eb-garamond"
+                paragraphFont="stix-two-text"
                 className="border-0 pt-0"
               />
             </section>

@@ -2,6 +2,7 @@ import type { ArticleReferenceRow } from "@/lib/articles/extra-metadata";
 import { ArticleReferencesSection } from "@/components/articles/article-references-section";
 import { renderArticleMarkdownToHtml } from "@/lib/articles/markdown";
 import { ebGaramond } from "@/lib/fonts/eb-garamond";
+import { stixTwoText } from "@/lib/fonts/stix-two-text";
 import { cn } from "@/lib/utils";
 
 type ArticleAsset = {
@@ -30,8 +31,8 @@ export function ArticlePreview({
   /** Optional abstract shown above the body (Markdown + [n] citations). */
   abstractMarkdown?: string;
   references?: ArticleReferenceRow[];
-  /** `eb-garamond`: body paragraphs only; headings keep the site default font. */
-  paragraphFont?: "inherit" | "eb-garamond";
+  /** Body paragraphs only; headings keep the site default font. */
+  paragraphFont?: "inherit" | "eb-garamond" | "stix-two-text";
 }) {
   const sorted = [...assets].sort((a, b) => a.sort_order - b.sort_order);
   const abstractHtml = abstractMarkdown?.trim()
@@ -45,6 +46,9 @@ export function ArticlePreview({
         paragraphFont === "eb-garamond" && ebGaramond.variable,
         paragraphFont === "eb-garamond" &&
           "[&_p]:[font-family:var(--font-eb-garamond),Georgia,serif]",
+        paragraphFont === "stix-two-text" && stixTwoText.variable,
+        paragraphFont === "stix-two-text" &&
+          "[&_p]:[font-family:var(--font-stix-two-text),Georgia,serif]",
       )}
     >
       {abstractHtml ? (
@@ -62,4 +66,3 @@ export function ArticlePreview({
     </div>
   );
 }
-
