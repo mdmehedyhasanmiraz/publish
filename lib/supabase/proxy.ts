@@ -1,6 +1,79 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  canAccessAdminRoutes,
+  canAccessEditorRoutes,
+  isAdminPortalPath,
+  isEditorPortalPath,
+  rolesFromProfile,
+} from "@/lib/auth/portal-access";
 import { hasEnvVars } from "../utils";
+
+/** `/admin` and `/editor` — auth + role gates (used from root `proxy.ts`). */
+export async function enforceAdminEditorProxy(request: NextRequest) {
+  let response = NextResponse.next({ request });
+
+  if (!hasEnvVars) {
+    return response;
+  }
+
+  const path = request.nextUrl.pathname;
+  const isAdmin = isAdminPortalPath(path);
+  const isEditor = isEditorPortalPath(path);
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    {
+      cookies: {
+        encode: "tokens-only",
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet, headers) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+          Object.entries(headers ?? {}).forEach(([key, value]) => {
+            response.headers.set(key, value);
+          });
+        },
+      },
+    },
+  );
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const loginUrl = request.nextUrl.clone();
+  loginUrl.pathname = "/auth/login";
+  loginUrl.searchParams.set("next", `${path}${request.nextUrl.search}`);
+
+  function redirectWithSession(dest: URL) {
+    const redirectResponse = NextResponse.redirect(dest);
+    response.cookies.getAll().forEach((c) => {
+      redirectResponse.cookies.set(c.name, c.value);
+    });
+    return redirectResponse;
+  }
+
+  if (!user) {
+    return redirectWithSession(loginUrl);
+  }
+
+  const { data: profile } = await supabase.from("profiles").select("role, roles").eq("user_id", user.id).maybeSingle();
+  const roles = rolesFromProfile(profile);
+
+  if (isAdmin && !canAccessAdminRoutes(roles)) {
+    return redirectWithSession(new URL("/", request.url));
+  }
+  if (isEditor && !canAccessEditorRoutes(roles)) {
+    return redirectWithSession(new URL("/", request.url));
+  }
+
+  return response;
+}
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -20,10 +93,11 @@ export async function updateSession(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
       cookies: {
+        encode: "tokens-only",
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet, headers) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value),
           );
@@ -33,6 +107,9 @@ export async function updateSession(request: NextRequest) {
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options),
           );
+          Object.entries(headers).forEach(([key, value]) => {
+            supabaseResponse.headers.set(key, value);
+          });
         },
       },
     },

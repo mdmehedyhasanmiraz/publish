@@ -23,13 +23,13 @@ export default function PublisherHomePage() {
           <aside className="rounded border border-border bg-muted/40 p-5">
             <h3 className="text-base font-semibold">Quick Access</h3>
             <div className="mt-4 grid gap-3">
-              <Link href="/j/demo-journal" className="rounded border bg-white p-3 text-sm hover:bg-accent">
-                Journal Homepage
+              <Link href="/journals" className="rounded border bg-white p-3 text-sm hover:bg-accent">
+                Browse journals
               </Link>
-              <Link href="/dashboard/submissions" className="rounded border bg-white p-3 text-sm hover:bg-accent">
+              <Link href="/author/submissions" className="rounded border bg-white p-3 text-sm hover:bg-accent">
                 Submit a Manuscript
               </Link>
-              <Link href="/dashboard/editorial" className="rounded border bg-white p-3 text-sm hover:bg-accent">
+              <Link href="/editor/queue" className="rounded border bg-white p-3 text-sm hover:bg-accent">
                 Editorial Office
               </Link>
             </div>

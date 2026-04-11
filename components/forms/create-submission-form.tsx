@@ -71,7 +71,7 @@ export function CreateSubmissionForm({ journals }: { journals: Journal[] }) {
           {pending ? "Saving…" : "Save draft"}
         </Button>
         <Button variant="outline" asChild>
-          <Link href="/dashboard/submissions">Back to submissions</Link>
+          <Link href="/author/submissions">Back to submissions</Link>
         </Button>
       </div>
     </form>

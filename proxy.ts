@@ -1,8 +1,13 @@
-import { updateSession } from "@/lib/supabase/proxy";
+import { isAdminPortalPath, isEditorPortalPath } from "@/lib/auth/portal-access";
+import { enforceAdminEditorProxy, updateSession } from "@/lib/supabase/proxy";
 import { type NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
-  return await updateSession(request);
+  const path = request.nextUrl.pathname;
+  if (isAdminPortalPath(path) || isEditorPortalPath(path)) {
+    return enforceAdminEditorProxy(request);
+  }
+  return updateSession(request);
 }
 
 export const config = {

@@ -109,7 +109,7 @@ export function CreateIssueForm({ journals }: { journals: Journal[] }) {
           {pending ? "Creating…" : "Create issue"}
         </Button>
         <Button variant="outline" asChild>
-          <Link href="/dashboard/admin/issues">Cancel</Link>
+          <Link href="/admin/issues">Cancel</Link>
         </Button>
       </div>
     </form>

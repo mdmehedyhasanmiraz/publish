@@ -14,6 +14,7 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
       cookies: {
+        encode: "tokens-only",
         getAll() {
           return cookieStore.getAll();
         },

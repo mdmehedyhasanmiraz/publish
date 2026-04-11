@@ -1,12 +1,11 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { getPublisherId } from "@/lib/db/publisher-context";
 import { revalidatePath } from "next/cache";
-import { assertTransition } from "@/lib/workflows/submission-machine";
+import type { WizardAuthorRow } from "@/lib/submissions/wizard-author-types";
 
 export type SubmissionActionState = { ok: boolean; message?: string; submissionId?: string };
-export type RegisterSubmissionFileResult = { ok: boolean; message?: string };
+export type RegisterSubmissionFileResult = { ok: boolean; message?: string; fileId?: string };
 export type SubmitSubmissionResult = { ok: boolean; message?: string };
 
 export async function createSubmissionAction(
@@ -14,11 +13,13 @@ export async function createSubmissionAction(
   formData: FormData,
 ): Promise<SubmissionActionState> {
   const journalId = String(formData.get("journal_id") ?? "");
-  const title = String(formData.get("title") ?? "").trim();
+  const title = String(formData.get("title") ?? "").trim() || "Untitled submission";
   const abstract = String(formData.get("abstract") ?? "").trim();
+  const area = String(formData.get("area") ?? "").trim();
+  const submissionType = String(formData.get("submission_type") ?? "").trim();
 
-  if (!journalId || !title) {
-    return { ok: false, message: "Journal and title are required." };
+  if (!journalId || !area || !submissionType) {
+    return { ok: false, message: "Journal, area/field, and submission type are required." };
   }
 
   const supabase = await createClient();
@@ -30,38 +31,30 @@ export async function createSubmissionAction(
     return { ok: false, message: "You must be signed in to submit." };
   }
 
-  const publisherId = await getPublisherId();
-  const insertRow: Record<string, unknown> = {
-    journal_id: journalId,
-    owner_user_id: user.id,
+  const { saveWizardStep1 } = await import("@/lib/submissions/save-wizard-step1");
+  const result = await saveWizardStep1(supabase, user.id, {
+    submissionId: null,
+    journalId,
     title,
-    abstract: abstract || null,
-    status: "draft",
-  };
-  if (publisherId) insertRow.publisher_id = publisherId;
-
-  const { data: submission, error: subError } = await supabase
-    .from("submissions")
-    .insert(insertRow)
-    .select("id")
-    .single();
-
-  if (subError || !submission) {
-    return { ok: false, message: subError?.message ?? "Could not create submission." };
-  }
-
-  const { error: verError } = await supabase.from("submission_versions").insert({
-    submission_id: submission.id,
-    version_number: 1,
-    created_by: user.id,
+    abstract,
+    area,
+    submissionType,
   });
+  if (!result.ok) return { ok: false, message: result.message };
 
-  if (verError) {
-    return { ok: false, message: verError.message };
+  try {
+    revalidatePath("/author/submissions");
+    revalidatePath("/author/submissions/new");
+    revalidatePath(`/author/submissions/${result.submissionId}`);
+  } catch {
+    /* ignore */
   }
 
-  revalidatePath("/dashboard/submissions");
-  return { ok: true, submissionId: submission.id, message: "Draft saved. You can add files and submit when ready." };
+  return {
+    ok: true,
+    submissionId: result.submissionId,
+    message: result.message ?? "Draft saved. You can add files and submit when ready.",
+  };
 }
 
 export async function registerSubmissionFileAction(input: {
@@ -70,6 +63,7 @@ export async function registerSubmissionFileAction(input: {
   fileKind: string;
   storagePath: string;
   mimeType: string | null;
+  description?: string;
 }): Promise<RegisterSubmissionFileResult> {
   const supabase = await createClient();
   const {
@@ -78,38 +72,159 @@ export async function registerSubmissionFileAction(input: {
 
   if (!user) return { ok: false, message: "You must be signed in." };
 
-  const { data: submission, error: subErr } = await supabase
-    .from("submissions")
-    .select("id, publisher_id, journal_id, owner_user_id")
-    .eq("id", input.submissionId)
-    .single();
+  const { registerSubmissionFile } = await import("@/lib/submissions/register-submission-file");
+  const result = await registerSubmissionFile(supabase, user.id, input);
+  if (result.ok) {
+    try {
+      revalidatePath(`/author/submissions/${input.submissionId}`);
+      revalidatePath("/author/submissions/new");
+    } catch {
+      /* ignore */
+    }
+  }
+  return result;
+}
 
-  if (subErr || !submission) return { ok: false, message: "Submission not found." };
-  if (submission.owner_user_id !== user.id) return { ok: false, message: "Not allowed." };
+export async function removeSubmissionFileAction(input: { fileId: string; storagePath: string }) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, message: "You must be signed in." };
 
-  const { data: version, error: verErr } = await supabase
-    .from("submission_versions")
-    .select("id")
-    .eq("id", input.submissionVersionId)
-    .eq("submission_id", input.submissionId)
-    .single();
+  const { removeSubmissionFile } = await import("@/lib/submissions/remove-submission-file");
+  const result = await removeSubmissionFile(supabase, user.id, input);
+  if (result.ok) {
+    try {
+      if (result.submissionId) revalidatePath(`/author/submissions/${result.submissionId}`);
+      revalidatePath("/author/submissions/new");
+    } catch {
+      /* ignore */
+    }
+  }
+  return result;
+}
 
-  if (verErr || !version) return { ok: false, message: "Submission version not found." };
+export async function deleteSubmissionAction(input: { submissionId: string }) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, message: "You must be signed in." };
 
-  const { error: insErr } = await supabase.from("submission_files").insert({
-    publisher_id: submission.publisher_id,
-    journal_id: submission.journal_id,
-    submission_id: input.submissionId,
-    submission_version_id: input.submissionVersionId,
-    file_kind: input.fileKind,
-    storage_path: input.storagePath,
-    mime_type: input.mimeType,
-  });
+  const { deleteDraftSubmission } = await import("@/lib/submissions/delete-draft-submission");
+  const result = await deleteDraftSubmission(supabase, user.id, input.submissionId);
+  if (!result.ok) return result;
 
-  if (insErr) return { ok: false, message: insErr.message };
+  try {
+    revalidatePath("/author/submissions");
+    revalidatePath("/author/submissions/new");
+    revalidatePath(`/author/submissions/${input.submissionId}`);
+  } catch {
+    /* ignore revalidation errors */
+  }
 
-  revalidatePath(`/dashboard/submissions/${input.submissionId}`);
-  return { ok: true, message: "File registered." };
+  return { ok: true as const, message: result.message ?? "Submission deleted." };
+}
+
+export async function updateSubmissionStep3Action(input: {
+  submissionId: string;
+  authorsJson: string;
+}) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, message: "You must be signed in." };
+
+  let payload: unknown;
+  try {
+    payload = input.authorsJson.trim() ? JSON.parse(input.authorsJson) : [];
+  } catch {
+    return { ok: false as const, message: "Authors payload must be valid JSON." };
+  }
+  if (!Array.isArray(payload)) return { ok: false as const, message: "Authors payload must be an array." };
+
+  const { saveWizardStep3Authors } = await import("@/lib/submissions/save-wizard-step3-authors");
+  const result = await saveWizardStep3Authors(supabase, user.id, input.submissionId, payload as WizardAuthorRow[]);
+  if (!result.ok) return result;
+
+  try {
+    revalidatePath(`/author/submissions/${input.submissionId}`);
+    revalidatePath("/author/submissions/new");
+  } catch {
+    /* ignore */
+  }
+  return { ok: true as const, message: result.message ?? "Author affiliations saved." };
+}
+
+export async function lookupAuthorByEmailAction(input: { email: string }) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, message: "You must be signed in." };
+
+  const email = input.email.trim().toLowerCase();
+  if (!email) return { ok: false as const, message: "Email is required." };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select(
+      "user_id, salutation, first_name, middle_name, last_name, suffix, display_name, email, alternate_email, phone, whatsapp, orcid_id, scopus_author_id, wos_researcher_id, google_scholar_url, loop_profile_url, publons_url, address_line1, address_line2, city, state_region, postal_code, country_code",
+    )
+    .eq("email", email)
+    .maybeSingle();
+
+  if (!profile) {
+    return {
+      ok: true as const,
+      exists: false as const,
+      message:
+        "No account found for this email yet. This author will be notified to confirm affiliations after they register with this email.",
+    };
+  }
+
+  const { data: affiliations } = await supabase
+    .from("profile_affiliations")
+    .select("institution_name, department, position_title, city, country_code, start_date, end_date, is_primary")
+    .eq("user_id", profile.user_id)
+    .order("is_primary", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  return {
+    ok: true as const,
+    exists: true as const,
+    profile,
+    affiliations: affiliations ?? [],
+    message: "Author profile found. Fields and affiliations were prefilled.",
+  };
+}
+
+export async function updateSubmissionStep4Action(input: {
+  submissionId: string;
+  title: string;
+  abstract: string;
+  supplementaryDataLink: string;
+  submissionNotes: string;
+}) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, message: "You must be signed in." };
+
+  const { saveWizardStep4Details } = await import("@/lib/submissions/save-wizard-step4-details");
+  const result = await saveWizardStep4Details(supabase, user.id, input);
+  if (!result.ok) return result;
+
+  try {
+    revalidatePath(`/author/submissions/${input.submissionId}`);
+    revalidatePath("/author/submissions/new");
+  } catch {
+    /* ignore */
+  }
+  return { ok: true as const, message: result.message ?? "Submission details saved." };
 }
 
 export async function submitSubmissionAction(input: { submissionId: string }): Promise<SubmitSubmissionResult> {
@@ -119,29 +234,40 @@ export async function submitSubmissionAction(input: { submissionId: string }): P
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, message: "You must be signed in." };
 
-  const { data: current, error } = await supabase
-    .from("submissions")
-    .select("id, status, owner_user_id")
-    .eq("id", input.submissionId)
-    .single();
-
-  if (error || !current) return { ok: false, message: "Submission not found." };
-  if (current.owner_user_id !== user.id) return { ok: false, message: "Not allowed." };
+  const { submitSubmissionForReview } = await import("@/lib/submissions/submit-submission-for-review");
+  const result = await submitSubmissionForReview(supabase, user.id, input.submissionId);
+  if (!result.ok) return result;
 
   try {
-    assertTransition(current.status, "submitted");
-  } catch (e) {
-    return { ok: false, message: e instanceof Error ? e.message : "Invalid transition." };
+    revalidatePath("/author/submissions");
+    revalidatePath(`/author/submissions/${input.submissionId}`);
+  } catch {
+    /* ignore */
   }
+  return { ok: true, message: result.message ?? "Submitted for editorial review." };
+}
 
-  const { error: upErr } = await supabase
-    .from("submissions")
-    .update({ status: "submitted" })
-    .eq("id", input.submissionId);
+export type ExtractManuscriptMetadataResult =
+  | {
+      ok: true;
+      title?: string;
+      abstract?: string;
+      skipped?: boolean;
+      reason?: "no_file" | "unsupported_format" | "empty";
+      message?: string;
+    }
+  | { ok: false; message: string };
 
-  if (upErr) return { ok: false, message: upErr.message };
+/** Download latest manuscript DOCX for a submission and extract title/abstract (best-effort). */
+export async function extractManuscriptMetadataAction(input: {
+  submissionId: string;
+}): Promise<ExtractManuscriptMetadataResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "You must be signed in." };
 
-  revalidatePath("/dashboard/submissions");
-  revalidatePath(`/dashboard/submissions/${input.submissionId}`);
-  return { ok: true, message: "Submitted for editorial review." };
+  const { extractSubmissionManuscriptMetadata } = await import("@/lib/submissions/extract-submission-manuscript-metadata");
+  return extractSubmissionManuscriptMetadata(supabase, user.id, input.submissionId);
 }

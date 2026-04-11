@@ -1,38 +1,11 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { getPublisherId, getVolumesForJournal } from "@/lib/db/publisher-context";
+import { getVolumesForJournal } from "@/lib/db/journals";
 import { slugify } from "@/lib/utils";
 import { revalidatePath } from "next/cache";
 
 export type ActionState = { ok: boolean; message?: string; id?: string };
-
-export async function createJournalAction(
-  _prev: ActionState | undefined,
-  formData: FormData,
-): Promise<ActionState> {
-  const name = String(formData.get("name") ?? "").trim();
-  const slugRaw = String(formData.get("slug") ?? "").trim();
-  const slug = slugRaw ? slugify(slugRaw) : slugify(name);
-
-  if (!name || !slug) {
-    return { ok: false, message: "Name and slug are required." };
-  }
-
-  const publisherId = await getPublisherId();
-  const supabase = await createClient();
-  const insertRow: Record<string, unknown> = { name, slug };
-  if (publisherId) insertRow.publisher_id = publisherId;
-  const { data, error } = await supabase
-    .from("journals")
-    .insert(insertRow)
-    .select("id")
-    .single();
-
-  if (error) return { ok: false, message: error.message };
-  revalidatePath("/dashboard/admin/journals");
-  return { ok: true, id: data.id, message: "Journal created." };
-}
 
 export async function createVolumeAction(
   _prev: ActionState | undefined,
@@ -49,15 +22,13 @@ export async function createVolumeAction(
     return { ok: false, message: "Journal and volume number are required." };
   }
 
-  const publisherId = await getPublisherId();
   const supabase = await createClient();
-  const insertRow: Record<string, unknown> = {
+  const insertRow = {
     journal_id: journalId,
     volume_number: volumeNumber,
     volume_slug: volumeSlug,
     published_year: publishedYear,
   };
-  if (publisherId) insertRow.publisher_id = publisherId;
 
   const { data, error } = await supabase
     .from("volumes")
@@ -66,7 +37,7 @@ export async function createVolumeAction(
     .single();
 
   if (error) return { ok: false, message: error.message };
-  revalidatePath("/dashboard/admin/volumes");
+  revalidatePath("/admin/volumes");
   return { ok: true, id: data.id, message: "Volume created." };
 }
 
@@ -85,15 +56,13 @@ export async function createIssueAction(
     return { ok: false, message: "Journal, volume, and issue slug (or number) are required." };
   }
 
-  const publisherId = await getPublisherId();
   const supabase = await createClient();
-  const insertRow: Record<string, unknown> = {
+  const insertRow = {
     journal_id: journalId,
     volume_id: volumeId,
     issue_number: issueNumber,
     issue_slug: issueSlug,
   };
-  if (publisherId) insertRow.publisher_id = publisherId;
 
   const { data, error } = await supabase
     .from("issues")
@@ -102,7 +71,7 @@ export async function createIssueAction(
     .single();
 
   if (error) return { ok: false, message: error.message };
-  revalidatePath("/dashboard/admin/issues");
+  revalidatePath("/admin/issues");
   return { ok: true, id: data.id, message: "Issue created." };
 }
 

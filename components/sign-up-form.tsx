@@ -10,21 +10,28 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { isRegistrationRole, type RegistrationRole } from "@/lib/auth/signup-roles";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+function safeInternalNextPath(next: string | undefined | null) {
+  if (!next || !next.startsWith("/") || next.startsWith("//")) return null;
+  return next;
+}
+
 export function SignUpForm({
+  initialEmail = "",
+  nextPath,
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"div">) {
-  const [email, setEmail] = useState("");
+}: React.ComponentPropsWithoutRef<"div"> & { initialEmail?: string; nextPath?: string | null }) {
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
-  const [role, setRole] = useState<RegistrationRole | "">("");
+  const [availableForReview, setAvailableForReview] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
@@ -41,12 +48,6 @@ export function SignUpForm({
       return;
     }
 
-    if (!role || !isRegistrationRole(role)) {
-      setError("Please select whether you are registering as an author or a reviewer.");
-      setIsLoading(false);
-      return;
-    }
-
     try {
       const { error } = await supabase.auth.signUp({
         email,
@@ -54,12 +55,14 @@ export function SignUpForm({
         options: {
           emailRedirectTo: `${window.location.origin}/auth/login`,
           data: {
-            role,
+            role: "author",
+            available_for_review: availableForReview,
           },
         },
       });
       if (error) throw error;
-      router.push("/auth/sign-up-success");
+      const next = safeInternalNextPath(nextPath ?? null);
+      router.push(next ? `/auth/sign-up-success?next=${encodeURIComponent(next)}` : "/auth/sign-up-success");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
@@ -73,29 +76,12 @@ export function SignUpForm({
         <CardHeader>
           <CardTitle className="text-2xl">Sign up</CardTitle>
           <CardDescription>
-            Create an account as an author or reviewer. Staff roles are assigned by your publisher.
+            New accounts are authors by default. Staff roles are assigned by your publisher.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignUp}>
             <div className="flex flex-col gap-6">
-              <div className="grid gap-2">
-                <Label htmlFor="role">I am registering as</Label>
-                <select
-                  id="role"
-                  name="role"
-                  required
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as RegistrationRole | "")}
-                  className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
-                >
-                  <option value="" disabled>
-                    Select role…
-                  </option>
-                  <option value="author">Author — submit manuscripts</option>
-                  <option value="reviewer">Reviewer — peer review</option>
-                </select>
-              </div>
               <div className="grid gap-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -130,6 +116,22 @@ export function SignUpForm({
                   value={repeatPassword}
                   onChange={(e) => setRepeatPassword(e.target.value)}
                 />
+              </div>
+              <div className="flex items-start gap-3 rounded-md border p-4">
+                <Checkbox
+                  id="signup-reviewer"
+                  checked={availableForReview}
+                  onCheckedChange={(v) => setAvailableForReview(v === true)}
+                  disabled={isLoading}
+                />
+                <div className="grid gap-1 leading-none">
+                  <Label htmlFor="signup-reviewer" className="cursor-pointer font-medium">
+                    I am available to be invited as a peer reviewer
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Saved to your profile. Editors use this when building reviewer pools.
+                  </p>
+                </div>
               </div>
               {error && <p className="text-sm text-red-500">{error}</p>}
               <Button type="submit" className="w-full" disabled={isLoading}>

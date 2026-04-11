@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
-import { registerSubmissionFileAction } from "@/lib/actions/submission";
 
 type ExistingFile = { id: string; kind: string; path: string; mime: string | null };
 
@@ -40,17 +39,32 @@ export function SubmissionFilesSection(props: {
     if (upErr) return setMessage(upErr.message);
 
     startTransition(async () => {
-      const res = await registerSubmissionFileAction({
-        submissionId: props.submissionId,
-        submissionVersionId: props.currentVersionId!,
-        fileKind: kind,
-        storagePath: objectPath,
-        mimeType: file.type || null,
-      });
+      let res: { ok: boolean; message?: string };
+      try {
+        const fetchRes = await fetch("/api/author/submissions/files/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            submissionId: props.submissionId,
+            submissionVersionId: props.currentVersionId!,
+            fileKind: kind,
+            storagePath: objectPath,
+            mimeType: file.type || null,
+          }),
+        });
+        try {
+          res = (await fetchRes.json()) as typeof res;
+        } catch {
+          setMessage("Invalid response from server.");
+          return;
+        }
+      } catch {
+        setMessage("Network error while registering file.");
+        return;
+      }
       setMessage(res.message ?? (res.ok ? "Uploaded." : "Upload registered with errors."));
       if (res.ok) {
         setFile(null);
-        // Let the server component refetch.
         location.reload();
       }
     });

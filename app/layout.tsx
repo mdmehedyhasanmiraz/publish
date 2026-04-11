@@ -24,8 +24,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="light">
-      <body className={`${geistSans.className} antialiased`}>
+    <html lang="en" className="light overflow-x-hidden">
+      <body className={`${geistSans.className} min-w-0 antialiased`}>
         {children}
       </body>
     </html>

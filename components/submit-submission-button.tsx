@@ -20,7 +20,7 @@ export function SubmitSubmissionButton(props: { submissionId: string; currentSta
             const res = await submitSubmissionAction({ submissionId: props.submissionId });
             setMessage(res.message ?? (res.ok ? "Submitted." : "Could not submit."));
             if (res.ok) {
-              location.href = `/dashboard/submissions/${props.submissionId}`;
+              location.href = `/author/submissions/${props.submissionId}`;
             }
           });
         }}

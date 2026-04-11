@@ -14,7 +14,6 @@ Deno.serve(async (req) => {
   );
 
   await supabase.from("audit_logs").insert({
-    publisher_id: crypto.randomUUID(),
     actor_user_id: crypto.randomUUID(),
     entity_type: "openalex_enrichment",
     entity_id: crypto.randomUUID(),

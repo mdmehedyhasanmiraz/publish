@@ -60,7 +60,7 @@ export function CreateVolumeForm({ journals }: { journals: Journal[] }) {
           {pending ? "Creating…" : "Create volume"}
         </Button>
         <Button variant="outline" asChild>
-          <Link href="/dashboard/admin/volumes">Cancel</Link>
+          <Link href="/admin/volumes">Cancel</Link>
         </Button>
       </div>
     </form>
