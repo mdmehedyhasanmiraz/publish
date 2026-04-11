@@ -6,7 +6,17 @@ import { Check, ChevronRight, Circle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-const DropdownMenu = DropdownMenuPrimitive.Root;
+/**
+ * Radix defaults `modal` to true, which scroll-locks the document and applies
+ * scrollbar-width padding to `body`. That often causes horizontal layout shift
+ * (especially with `overflow-x-hidden` on `html`). Menus are non-modal by default.
+ */
+function DropdownMenu({
+  modal = false,
+  ...props
+}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Root>) {
+  return <DropdownMenuPrimitive.Root modal={modal} {...props} />;
+}
 
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 
