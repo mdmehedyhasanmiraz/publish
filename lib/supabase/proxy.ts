@@ -5,6 +5,7 @@ import {
   canAccessEditorRoutes,
   isAdminPortalPath,
   isEditorPortalPath,
+  isPortalProtectedPath,
   rolesFromProfile,
 } from "@/lib/auth/portal-access";
 import { hasEnvVars } from "../utils";
@@ -124,16 +125,16 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
 
-  if (
-    request.nextUrl.pathname !== "/" &&
-    !user &&
-    !request.nextUrl.pathname.startsWith("/login") &&
-    !request.nextUrl.pathname.startsWith("/auth")
-  ) {
-    // no user, potentially respond by redirecting the user to the login page
+  const path = request.nextUrl.pathname;
+  if (!path.startsWith("/api") && isPortalProtectedPath(path) && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
-    return NextResponse.redirect(url);
+    url.searchParams.set("next", `${path}${request.nextUrl.search}`);
+    const redirectResponse = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((c) => {
+      redirectResponse.cookies.set(c.name, c.value);
+    });
+    return redirectResponse;
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.

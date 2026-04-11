@@ -10,6 +10,27 @@ export function isEditorPortalPath(pathname: string): boolean {
   return pathname === "/editor" || pathname.startsWith("/editor/");
 }
 
+/**
+ * Authenticated workspaces under `(portal)` — require login in `proxy.ts` session refresh.
+ * Public marketing, journals, and `/review/invite/*` must NOT match here.
+ */
+export function isPortalProtectedPath(pathname: string): boolean {
+  return (
+    pathname === "/admin" ||
+    pathname.startsWith("/admin/") ||
+    pathname === "/editor" ||
+    pathname.startsWith("/editor/") ||
+    pathname === "/author" ||
+    pathname.startsWith("/author/") ||
+    pathname === "/reviewer" ||
+    pathname.startsWith("/reviewer/") ||
+    pathname === "/production" ||
+    pathname.startsWith("/production/") ||
+    pathname === "/profile" ||
+    pathname.startsWith("/profile/")
+  );
+}
+
 /** Platform admin workspace: `/admin` */
 export function canAccessAdminRoutes(roles: readonly AppRole[]): boolean {
   return roles.includes("admin");
