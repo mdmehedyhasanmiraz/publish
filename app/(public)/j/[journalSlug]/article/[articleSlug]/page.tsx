@@ -2,7 +2,14 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ArticlePreview } from "@/components/articles/article-preview";
+import { ArticleReferencesSection } from "@/components/articles/article-references-section";
 import { ArticlePublicSidebar } from "@/components/public/article-public-sidebar";
+import { ArticlePublicByline } from "@/components/public/article-public-byline";
+import { ArticlePublicationTimeline } from "@/components/public/article-publication-timeline";
+import { JournalCoverImage } from "@/components/public/journal-cover-image";
+import { submissionTypeDisplay } from "@/lib/articles/submission-type-label";
+import type { PublicArticleAuthorRow } from "@/lib/articles/public-article-authors";
+import { publicCoverUrl } from "@/lib/storage/covers";
 import type { ArticleTocItem } from "@/lib/articles/markdown";
 import { renderArticleMarkdownToHtmlWithToc } from "@/lib/articles/markdown";
 import { parseArticleExtraMetadata } from "@/lib/articles/extra-metadata";
@@ -28,7 +35,9 @@ export default async function ArticlePage({ params }: Props) {
 
   const { data: article } = await supabase
     .from("articles")
-    .select("id, title, slug, doi, abstract, keywords, published_at, status, current_version_id, journals(name, slug), submission_id")
+    .select(
+      "id, title, slug, doi, abstract, keywords, published_at, status, current_version_id, public_submitted_at, public_revised_at, public_accepted_at, public_submission_type, journals(name, slug, cover_image_path), submission_id",
+    )
     .eq("slug", articleSlug)
     .eq("status", "published")
     .eq("journals.slug", journalSlug)
@@ -57,10 +66,11 @@ export default async function ArticlePage({ params }: Props) {
       : Promise.resolve({ data: null }),
   ]);
 
-  const authorAffiliations = Array.isArray(submission?.author_affiliations)
-    ? submission.author_affiliations
+  const authorAffiliations: PublicArticleAuthorRow[] = Array.isArray(submission?.author_affiliations)
+    ? (submission.author_affiliations as PublicArticleAuthorRow[])
     : [];
   const journal = Array.isArray(article.journals) ? article.journals[0] : article.journals;
+  const coverSrc = publicCoverUrl((journal as { cover_image_path?: string | null } | null)?.cover_image_path ?? null);
 
   const abstractMarkdown = (
     ((version.abstract as string | null) ?? (article.abstract as string | null) ?? "") as string
@@ -71,58 +81,78 @@ export default async function ArticlePage({ params }: Props) {
     (assets ?? []) as never,
   );
 
-  /** Sidebar outline: only second-level (##) section headings from the article body. */
-  const tocItems: ArticleTocItem[] = bodyToc.filter((item) => item.level === 2);
+  /** Sidebar outline: ## headings from the body, plus References when present. */
+  const tocItems: ArticleTocItem[] = [
+    ...bodyToc.filter((item) => item.level === 2),
+    ...(extra.references && extra.references.length > 0
+      ? ([{ level: 2, id: "references", text: "References" }] satisfies ArticleTocItem[])
+      : []),
+  ];
+
+  const doiDisplay = (article.doi as string | null)?.trim() || null;
+  const doiLink =
+    doiDisplay && !/^https?:\/\//i.test(doiDisplay)
+      ? `https://doi.org/${doiDisplay.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")}`
+      : doiDisplay;
+
+  const articleTypeLabel = submissionTypeDisplay(article.public_submission_type as string | null | undefined);
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
-      <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{journal?.name ?? journalSlug}</p>
-      <h1 className="mt-2 text-3xl font-bold">{(version.title as string) || (article.title as string)}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        {(article.published_at as string | null)
-          ? `Published ${new Date(article.published_at as string).toLocaleDateString()}`
-          : "Ahead of issue"}
-      </p>
-      <div className="mt-4 grid gap-2 rounded-lg border bg-white p-4 text-sm">
-        <p>
-          <span className="font-medium">DOI:</span> {(article.doi as string | null) ?? "Pending DOI"}
-        </p>
-        <p>
-          <span className="font-medium">URL:</span> /j/{journal?.slug ?? journalSlug}/article/{article.slug as string}
-        </p>
-        {Array.isArray(article.keywords) && (article.keywords as string[]).length ? (
-          <p>
-            <span className="font-medium">Keywords:</span> {(article.keywords as string[]).join(", ")}
+      <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between md:gap-6">
+        <div className="min-w-0 max-w-3xl flex-1 space-y-3">
+          <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[0.65rem] text-muted-foreground">
+            <span className="font-semibold uppercase tracking-[0.16em]">{journal?.name ?? journalSlug}</span>
+            {articleTypeLabel ? (
+              <>
+                <span className="select-none font-semibold text-muted-foreground/80" aria-hidden>
+                  ·
+                </span>
+                <span className="font-medium normal-case tracking-normal">{articleTypeLabel}</span>
+              </>
+            ) : null}
           </p>
-        ) : null}
-      </div>
-
-      {authorAffiliations.length ? (
-        <section className="mt-6 rounded-lg border bg-white p-4">
-          <h2 className="text-lg font-semibold">Authors and affiliations</h2>
-          <div className="mt-3 grid gap-3">
-            {authorAffiliations.map((a: any, idx: number) => (
-              <div key={`${a.email ?? idx}`} className="rounded border p-3">
-                <p className="font-medium">
-                  {[a.salutation, a.first_name, a.middle_name, a.last_name, a.suffix].filter(Boolean).join(" ")}
-                </p>
-                <p className="text-sm text-muted-foreground">{a.email ?? "—"}</p>
-                <div className="mt-2 grid gap-1 text-sm text-muted-foreground">
-                  {Array.isArray(a.affiliations) && a.affiliations.length ? (
-                    a.affiliations.map((af: any, i: number) => (
-                      <p key={i}>
-                        {(af.institution_name as string) ?? "Institution"} {af.department ? `· ${af.department}` : ""}
-                      </p>
-                    ))
-                  ) : (
-                    <p>No affiliations listed.</p>
-                  )}
-                </div>
-              </div>
-            ))}
+          <h1 className="text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl">
+            {(version.title as string) || (article.title as string)}
+          </h1>
+          <div className="text-xs leading-relaxed">
+            <span className="font-medium text-foreground">DOI: </span>
+            {doiDisplay ? (
+              doiLink && /^https?:\/\//i.test(doiLink) ? (
+                <a href={doiLink} className="text-primary underline-offset-2 hover:underline" target="_blank" rel="noreferrer">
+                  {doiDisplay}
+                </a>
+              ) : (
+                <span>{doiDisplay}</span>
+              )
+            ) : (
+              <span className="text-muted-foreground">Pending DOI</span>
+            )}
           </div>
-        </section>
-      ) : null}
+          {authorAffiliations.length > 0 ? <ArticlePublicByline authors={authorAffiliations} /> : null}
+          <ArticlePublicationTimeline
+            submittedAt={article.public_submitted_at as string | null | undefined}
+            revisedAt={article.public_revised_at as string | null | undefined}
+            acceptedAt={article.public_accepted_at as string | null | undefined}
+            publishedAt={article.published_at as string | null | undefined}
+          />
+          {Array.isArray(article.keywords) && (article.keywords as string[]).length ? (
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Keywords: </span>
+              {(article.keywords as string[]).join(", ")}
+            </p>
+          ) : null}
+          <p className="font-mono text-[0.7rem] text-muted-foreground break-all">
+            /j/{journal?.slug ?? journalSlug}/article/{article.slug as string}
+          </p>
+        </div>
+        <JournalCoverImage
+          src={coverSrc}
+          alt={`${journal?.name ?? journalSlug} cover`}
+          className="aspect-[3/4] w-full max-w-[140px] shrink-0 self-start sm:max-w-[168px] md:max-w-[192px]"
+          sizes="(max-width: 768px) 168px, 192px"
+        />
+      </div>
 
       <div className="mt-6 lg:grid lg:grid-cols-[minmax(0,1fr)_min(240px,30%)] lg:items-start lg:gap-12">
         <div className="min-w-0 space-y-6">
@@ -134,10 +164,19 @@ export default async function ArticlePage({ params }: Props) {
               markdownBody={(version.markdown_body as string) ?? ""}
               bodyHtml={bodyHtml}
               assets={(assets ?? []) as never}
-              references={extra.references}
               paragraphFont="eb-garamond"
             />
           </section>
+
+          {extra.references && extra.references.length > 0 ? (
+            <section className="rounded-lg border bg-white p-6">
+              <ArticleReferencesSection
+                references={extra.references}
+                paragraphFont="eb-garamond"
+                className="border-0 pt-0"
+              />
+            </section>
+          ) : null}
 
           {extra.acknowledgement?.trim() ? (
             <section className="rounded-lg border bg-white p-4">

@@ -402,9 +402,34 @@ async function setWorkflowStatus(input: {
   if (input.nextStatus === "published") {
     articlePatch.status = "published";
     articlePatch.published_at = new Date().toISOString();
+
+    const { data: pubArticle } = await supabase
+      .from("articles")
+      .select("submission_id")
+      .eq("id", input.articleId)
+      .maybeSingle();
+    if (pubArticle?.submission_id) {
+      const { data: sub } = await supabase
+        .from("submissions")
+        .select("submitted_at, revised_at, accepted_at, submission_type")
+        .eq("id", pubArticle.submission_id)
+        .maybeSingle();
+      if (sub) {
+        articlePatch.public_submission_type = sub.submission_type;
+        articlePatch.public_submitted_at = sub.submitted_at;
+        articlePatch.public_revised_at = sub.revised_at;
+        articlePatch.public_accepted_at = sub.accepted_at;
+      }
+    }
   } else {
     articlePatch.status = "ahead_of_issue";
-    if (input.nextStatus === "draft" || input.nextStatus === "approved") articlePatch.published_at = null;
+    if (input.nextStatus === "draft" || input.nextStatus === "approved") {
+      articlePatch.published_at = null;
+      articlePatch.public_submitted_at = null;
+      articlePatch.public_revised_at = null;
+      articlePatch.public_accepted_at = null;
+      articlePatch.public_submission_type = null;
+    }
   }
 
   const { error: aErr } = await supabase.from("articles").update(articlePatch).eq("id", input.articleId);

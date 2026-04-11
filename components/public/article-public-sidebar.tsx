@@ -39,13 +39,15 @@ export function ArticlePublicSidebar(props: { tocItems: ArticleTocItem[] }) {
       </div>
 
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Open access</p>
+        <p className="text-xs font-semibold uppercase leading-tight tracking-wide text-muted-foreground">
+          Access type
+        </p>
         <Image
           src="/logos/logo-openaccess.svg"
           alt="Open access"
-          width={140}
-          height={53}
-          className="mt-2 h-auto w-full max-w-[200px]"
+          width={70}
+          height={27}
+          className="mt-1 h-auto w-full max-w-[100px]"
         />
       </div>
     </aside>

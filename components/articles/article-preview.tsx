@@ -1,25 +1,8 @@
 import type { ArticleReferenceRow } from "@/lib/articles/extra-metadata";
-import {
-  crossrefSearchUrl,
-  doiHref,
-  extractDoiFromText,
-  googleScholarSearchUrlFromReferenceText,
-  normalizeDoi,
-} from "@/lib/articles/reference-links";
+import { ArticleReferencesSection } from "@/components/articles/article-references-section";
 import { renderArticleMarkdownToHtml } from "@/lib/articles/markdown";
 import { ebGaramond } from "@/lib/fonts/eb-garamond";
 import { cn } from "@/lib/utils";
-
-function crossrefQueryForRef(r: ArticleReferenceRow): string {
-  const d = r.doi?.trim() ? normalizeDoi(r.doi) : extractDoiFromText(r.text);
-  return d || r.text.trim().slice(0, 400);
-}
-
-function scholarUrlForRef(r: ArticleReferenceRow): string {
-  const u = r.google_scholar_url?.trim();
-  if (u) return u;
-  return googleScholarSearchUrlFromReferenceText(r.text);
-}
 
 type ArticleAsset = {
   id: string;
@@ -72,48 +55,9 @@ export function ArticlePreview({
       ) : null}
       <div dangerouslySetInnerHTML={{ __html: html }} />
       {references && references.length > 0 ? (
-        <section id="references" className="mt-10 scroll-mt-24 border-t pt-6 not-prose">
-          <h2 className="text-lg font-semibold text-foreground">References</h2>
-          <ol className="mt-3 list-decimal space-y-4 pl-6 text-[16px] leading-7 text-slate-800">
-            {references.map((r, i) => {
-              const n = i + 1;
-              const doiForLink = r.doi?.trim() ? normalizeDoi(r.doi) : extractDoiFromText(r.text);
-              return (
-                <li key={i} id={`reference-${n}`} className="break-words pl-1 marker:font-medium">
-                  <p className="whitespace-pre-wrap text-[18px] leading-8">{r.text}</p>
-                  <div className="mt-1 flex flex-wrap gap-3 text-xs">
-                    {doiForLink ? (
-                      <a
-                        href={doiHref(doiForLink)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-primary underline"
-                      >
-                        DOI
-                      </a>
-                    ) : null}
-                    <a
-                      href={crossrefSearchUrl(crossrefQueryForRef(r))}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-primary underline"
-                    >
-                      Crossref
-                    </a>
-                    <a
-                      href={scholarUrlForRef(r)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-primary underline"
-                    >
-                      Google Scholar
-                    </a>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        </section>
+        <div className="mt-10">
+          <ArticleReferencesSection references={references} paragraphFont={paragraphFont} />
+        </div>
       ) : null}
     </div>
   );

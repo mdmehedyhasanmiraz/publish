@@ -328,6 +328,15 @@ export function ArticleEditorForm(props: {
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
+                variant="outline"
+                size="sm"
+                disabled={pending || publishPending || importBusy || refsImportBusy}
+                onClick={save}
+              >
+                {pending ? "Saving…" : "Save"}
+              </Button>
+              <Button
+                type="button"
                 size="sm"
                 className="bg-teal-600 text-white shadow-sm hover:bg-teal-700"
                 disabled={publishPending || !canPublish}
@@ -365,6 +374,15 @@ export function ArticleEditorForm(props: {
               <Link href={props.submissionWorkflowHref}>Open submission workflow</Link>
             </Button>
           ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={pending || publishPending || importBusy || refsImportBusy}
+            onClick={save}
+          >
+            {pending ? "Saving…" : "Save"}
+          </Button>
           <Button
             type="button"
             size="sm"
