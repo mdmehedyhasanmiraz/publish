@@ -16,15 +16,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { forAuthorsCoreLinks, forAuthorsPolicyLinks } from "@/lib/for-authors-nav";
+import { JournalsNavDropdownPanel, JournalsNavTrigger } from "@/components/journals-nav-mega-menu";
 
 const primaryNav = [
-  { label: "Journals", href: "/journals" },
   { label: "About", href: "/about" },
   { label: "Latest Research", href: "/latest-research" },
 ] as const;
 
 export function SiteHeader() {
   const [isScrolled, setIsScrolled] = useState(false);
+  const [journalsMenuOpen, setJournalsMenuOpen] = useState(false);
 
   useEffect(() => {
     const onScroll = () => {
@@ -107,9 +108,9 @@ export function SiteHeader() {
 
       {isScrolled && <div className="h-[49px]" aria-hidden="true" />}
       <nav
-        className={`border-t ${
+        className={`relative z-50 border-t ${
           isScrolled
-            ? "fixed inset-x-0 top-0 z-50 border-teal-600 bg-teal-600 text-white shadow-md"
+            ? "fixed inset-x-0 top-0 border-teal-600 bg-teal-600 text-white shadow-md"
             : "border-border bg-white text-foreground"
         }`}
       >
@@ -130,6 +131,11 @@ export function SiteHeader() {
               className="h-6 w-auto"
             />
           </Link>
+          <JournalsNavTrigger
+            isOpen={journalsMenuOpen}
+            onToggle={() => setJournalsMenuOpen((o) => !o)}
+            isScrolled={isScrolled}
+          />
           {primaryNav.map((item) => (
             <Link
               key={item.href}
@@ -171,6 +177,7 @@ export function SiteHeader() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        <JournalsNavDropdownPanel open={journalsMenuOpen} onClose={() => setJournalsMenuOpen(false)} />
       </nav>
     </header>
   );

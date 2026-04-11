@@ -18,6 +18,17 @@ export async function getJournals(): Promise<JournalOption[]> {
   return (data ?? []) as JournalOption[];
 }
 
+/** Most recently created journals (UUID order) for nav mega-menu. */
+export async function getLatestJournalsForNav(limit = 6): Promise<JournalOption[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("journals")
+    .select("id, name, slug, submission_areas, submission_types, cover_image_path")
+    .order("id", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as JournalOption[];
+}
+
 export async function getJournalBySlug(slug: string): Promise<JournalOption | null> {
   const supabase = await createClient();
   const { data } = await supabase
