@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Copy, Check } from "lucide-react";
+import { BookMarked, Check, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -66,8 +66,9 @@ export function ArticleCiteButton(props: { work: CitationWork; articleSlug: stri
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="shrink-0">
-          Cite
+        <Button type="button" variant="outline" size="sm" className="shrink-0 gap-1.5">
+          <BookMarked className="size-3.5 shrink-0" aria-hidden />
+          Cite this article
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[min(90vh,640px)] max-w-2xl overflow-y-auto">

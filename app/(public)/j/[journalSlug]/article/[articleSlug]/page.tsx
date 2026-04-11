@@ -75,10 +75,6 @@ export default async function ArticlePage({ params }: Props) {
   const journal = Array.isArray(article.journals) ? article.journals[0] : article.journals;
   const coverSrc = publicCoverUrl((journal as { cover_image_path?: string | null } | null)?.cover_image_path ?? null);
 
-  const abstractMarkdown = (
-    ((version.abstract as string | null) ?? (article.abstract as string | null) ?? "") as string
-  ).trim();
-
   const { html: bodyHtml, toc: bodyToc } = renderArticleMarkdownToHtmlWithToc(
     (version.markdown_body as string) ?? "",
     (assets ?? []) as never,
@@ -156,9 +152,6 @@ export default async function ArticlePage({ params }: Props) {
               {(article.keywords as string[]).join(", ")}
             </p>
           ) : null}
-          <p className="font-mono text-[0.7rem] text-muted-foreground break-all">
-            /j/{journal?.slug ?? journalSlug}/article/{article.slug as string}
-          </p>
         </div>
         <JournalCoverImage
           src={coverSrc}

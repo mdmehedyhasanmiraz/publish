@@ -29,8 +29,7 @@ export function SiteFooter() {
               />
             </Link>
             <p className="mt-3 max-w-sm text-sm leading-relaxed text-white/80">
-              Multi-journal publishing platform for peer review, editorial workflow, and public dissemination of
-              research.
+              A comprehensive platform for scholarly publishing, supporting rigorous peer review, editorial excellence, and the global dissemination of research.
             </p>
           </div>
 

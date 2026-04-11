@@ -98,7 +98,7 @@ export function buildPublicArticleAuthorByline(authors: PublicArticleAuthorRow[]
   }
 
   const segments: AuthorBylineSegment[] = authors.map((author) => {
-    const displayName = [author.salutation, author.first_name, author.middle_name, author.last_name, author.suffix]
+    const displayName = [author.first_name, author.middle_name, author.last_name, author.suffix]
       .filter((x) => x && String(x).trim())
       .join(" ")
       .replace(/\s+/g, " ")
