@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
   ARTICLE_VERSION_ROW_SELECT,
+  ArticleVersionRow,
   ensureArticleHasEditVersion,
 } from "@/lib/articles/ensure-article-edit-version";
 import { requireArticleEditorAccess } from "@/lib/articles/require-article-editor-access";
@@ -46,15 +47,7 @@ export default async function AdminArticleEditPage({
 
   let versionId: string | null = (article.current_version_id as string | null) ?? null;
 
-  let version: {
-    id: string;
-    article_id: string;
-    title: string;
-    abstract: string | null;
-    markdown_body: string | null;
-    workflow_status: string | null;
-    extra_metadata: unknown;
-  } | null = null;
+  let version: ArticleVersionRow | null = null;
 
   if (versionId) {
     const { data: byId } = await supabase
@@ -63,7 +56,7 @@ export default async function AdminArticleEditPage({
       .eq("id", versionId)
       .maybeSingle();
     if (byId && (byId as { article_id: string }).article_id === articleId) {
-      version = byId as typeof version;
+      version = byId as ArticleVersionRow;
     }
   }
 
@@ -76,7 +69,7 @@ export default async function AdminArticleEditPage({
       .limit(1)
       .maybeSingle();
     if (latest && (latest as { article_id: string }).article_id === articleId) {
-      version = latest as typeof version;
+      version = latest as ArticleVersionRow;
       versionId = version.id;
     }
   }
@@ -96,7 +89,7 @@ export default async function AdminArticleEditPage({
         </div>
       );
     }
-    version = ensured.version as typeof version;
+    version = ensured.version;
   }
 
   if (!version) {

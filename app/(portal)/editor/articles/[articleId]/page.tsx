@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
   ARTICLE_VERSION_ROW_SELECT,
+  ArticleVersionRow,
   ensureArticleHasEditVersion,
 } from "@/lib/articles/ensure-article-edit-version";
 import { requireArticleEditorAccess } from "@/lib/articles/require-article-editor-access";
@@ -41,15 +42,7 @@ export default async function EditorArticleEditPage({
   const submissionId = (article.submission_id as string | null | undefined) ?? null;
   const submissionFiles = submissionId ? await loadSubmissionFilesForEditor(supabase, submissionId) : [];
 
-  let version: {
-    id: string;
-    article_id: string;
-    title: string;
-    abstract: string | null;
-    markdown_body: string | null;
-    workflow_status: string | null;
-    extra_metadata: unknown;
-  } | null = null;
+  let version: ArticleVersionRow | null = null;
 
   let versionId: string | null = (article.current_version_id as string | null) ?? null;
 
@@ -60,7 +53,7 @@ export default async function EditorArticleEditPage({
       .eq("id", versionId)
       .maybeSingle();
     if (byId && (byId as { article_id: string }).article_id === articleId) {
-      version = byId as typeof version;
+      version = byId as ArticleVersionRow;
     }
   }
 
@@ -73,7 +66,7 @@ export default async function EditorArticleEditPage({
       .limit(1)
       .maybeSingle();
     if (latest && (latest as { article_id: string }).article_id === articleId) {
-      version = latest as typeof version;
+      version = latest as ArticleVersionRow;
       versionId = version.id;
     }
   }
@@ -93,7 +86,7 @@ export default async function EditorArticleEditPage({
         </div>
       );
     }
-    version = ensured.version as typeof version;
+    version = ensured.version;
   }
 
   if (!version) {

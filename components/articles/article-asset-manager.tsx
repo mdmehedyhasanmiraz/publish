@@ -67,7 +67,7 @@ export function ArticleAssetManager(props: {
         storagePath,
         sortOrder: Number(sortOrder || "0"),
       });
-      setMessage(res.message ?? (res.ok ? "Asset saved." : "Could not save asset."));
+      setMessage(res.ok ? "Asset saved." : (res.message ?? "Could not save asset."));
       if (res.ok) location.reload();
     });
   }

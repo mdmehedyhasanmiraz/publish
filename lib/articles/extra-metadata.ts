@@ -19,17 +19,15 @@ export function parseArticleExtraMetadata(raw: unknown): ArticleExtraMetadata {
   const o = raw as Record<string, unknown>;
   const refs = Array.isArray(o.references)
     ? o.references
-        .map((r) => {
+        .map((r): ArticleReferenceRow | null => {
           if (!r || typeof r !== "object") return null;
           const x = r as Record<string, unknown>;
           const text = typeof x.text === "string" ? x.text : "";
           if (!text.trim()) return null;
-          return {
-            text,
-            doi: typeof x.doi === "string" ? x.doi : undefined,
-            google_scholar_url:
-              typeof x.google_scholar_url === "string" ? x.google_scholar_url : undefined,
-          } satisfies ArticleReferenceRow;
+          const row: ArticleReferenceRow = { text };
+          if (typeof x.doi === "string") row.doi = x.doi;
+          if (typeof x.google_scholar_url === "string") row.google_scholar_url = x.google_scholar_url;
+          return row;
         })
         .filter((x): x is ArticleReferenceRow => x != null)
     : undefined;
