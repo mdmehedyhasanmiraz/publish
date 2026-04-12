@@ -7,13 +7,19 @@ export type JournalOption = {
   submission_areas: string[] | null;
   submission_types: string[] | null;
   cover_image_path: string | null;
+  issn_print: string | null;
+  issn_online: string | null;
+  status: string | null;
+  is_open_access: boolean;
 };
 
 export async function getJournals(): Promise<JournalOption[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("journals")
-    .select("id, name, slug, submission_areas, submission_types, cover_image_path")
+    .select(
+      "id, name, slug, submission_areas, submission_types, cover_image_path, issn_print, issn_online, status, is_open_access",
+    )
     .order("name");
   return (data ?? []) as JournalOption[];
 }
@@ -23,7 +29,9 @@ export async function getLatestJournalsForNav(limit = 6): Promise<JournalOption[
   const supabase = await createClient();
   const { data } = await supabase
     .from("journals")
-    .select("id, name, slug, submission_areas, submission_types, cover_image_path")
+    .select(
+      "id, name, slug, submission_areas, submission_types, cover_image_path, issn_print, issn_online, status, is_open_access",
+    )
     .order("id", { ascending: false })
     .limit(limit);
   return (data ?? []) as JournalOption[];
@@ -33,7 +41,9 @@ export async function getJournalBySlug(slug: string): Promise<JournalOption | nu
   const supabase = await createClient();
   const { data } = await supabase
     .from("journals")
-    .select("id, name, slug, submission_areas, submission_types, cover_image_path")
+    .select(
+      "id, name, slug, submission_areas, submission_types, cover_image_path, issn_print, issn_online, status, is_open_access",
+    )
     .eq("slug", slug)
     .maybeSingle();
   return (data ?? null) as JournalOption | null;

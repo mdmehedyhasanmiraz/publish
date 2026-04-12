@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { JournalCoverImage } from "@/components/public/journal-cover-image";
+import { JournalIssnDisplay } from "@/components/public/journal-issn-display";
 import { JournalForAuthorsPanel } from "@/components/public/journal-for-authors-panel";
 import { CcByLicenseBadge } from "@/components/public/cc-by-license-badge";
 import { getJournalBySlug } from "@/lib/db/journals";
@@ -33,6 +34,7 @@ export default async function JournalHomePage({ params }: Props) {
           <JournalCoverImage
             src={coverUrl}
             alt={`${journal.name} cover`}
+            journalName={journal.name}
             className="aspect-[3/4] w-full max-w-[260px] shrink-0"
             sizes="260px"
           />
@@ -44,6 +46,11 @@ export default async function JournalHomePage({ params }: Props) {
                 {journal.submission_areas && journal.submission_areas.length ? (
                   <p className="mt-3 text-sm text-muted-foreground">{journal.submission_areas.join(" · ")}</p>
                 ) : null}
+                <JournalIssnDisplay
+                  issn_print={journal.issn_print}
+                  issn_online={journal.issn_online}
+                  className={journal.submission_areas && journal.submission_areas.length ? "mt-2" : "mt-3"}
+                />
               </div>
               <Image
                 src="/logos/logo-openaccess.svg"

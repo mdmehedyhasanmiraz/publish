@@ -36,6 +36,7 @@ export default async function JournalsPage() {
                     <JournalCoverImage
                       src={cover}
                       alt={`${j.name} cover`}
+                      journalName={j.name}
                       className="mb-3 aspect-[3/4] w-full max-w-[140px]"
                       sizes="140px"
                     />

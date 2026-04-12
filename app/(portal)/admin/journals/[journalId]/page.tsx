@@ -11,7 +11,9 @@ export default async function EditJournalPage({
   const supabase = await createClient();
   const { data: journal } = await supabase
     .from("journals")
-    .select("id, name, slug, submission_areas, submission_types, cover_image_path")
+    .select(
+      "id, name, slug, submission_areas, submission_types, cover_image_path, issn_print, issn_online, status, is_open_access",
+    )
     .eq("id", journalId)
     .maybeSingle();
 

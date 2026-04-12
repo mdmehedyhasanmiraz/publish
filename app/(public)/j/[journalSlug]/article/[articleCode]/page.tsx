@@ -7,6 +7,7 @@ import { ArticlePublicSidebar } from "@/components/public/article-public-sidebar
 import { ArticlePublicByline } from "@/components/public/article-public-byline";
 import { ArticlePublicationTimeline } from "@/components/public/article-publication-timeline";
 import { JournalCoverImage } from "@/components/public/journal-cover-image";
+import { JournalIssnDisplay } from "@/components/public/journal-issn-display";
 import { submissionTypeDisplay } from "@/lib/articles/submission-type-label";
 import type { PublicArticleAuthorRow } from "@/lib/articles/public-article-authors";
 import { publicCoverUrl } from "@/lib/storage/covers";
@@ -19,6 +20,15 @@ import { ArticleCiteButton } from "@/components/public/article-cite-button";
 import { normalizeManuscriptReferenceCodeParam, publicArticlePath } from "@/lib/articles/public-article-path";
 
 type Props = { params: Promise<{ journalSlug: string; articleCode: string }> };
+
+type PublicJournalArticleHeader = {
+  id: string;
+  name: string | null;
+  slug: string | null;
+  cover_image_path: string | null;
+  issn_print: string | null;
+  issn_online: string | null;
+};
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { journalSlug, articleCode: articleCodeRaw } = await params;
@@ -46,12 +56,13 @@ export default async function ArticlePage({ params }: Props) {
   const articleCode = normalizeManuscriptReferenceCodeParam(articleCodeRaw);
   const supabase = await createClient();
 
-  const { data: journal } = await supabase
+  const { data: journalRaw } = await supabase
     .from("journals")
-    .select("id, name, slug, cover_image_path")
+    .select("id, name, slug, cover_image_path, issn_print, issn_online")
     .eq("slug", journalSlug)
     .maybeSingle();
-  if (!journal?.id) notFound();
+  if (!journalRaw?.id) notFound();
+  const journal = journalRaw as PublicJournalArticleHeader;
 
   const { data: article } = await supabase
     .from("articles")
@@ -160,6 +171,7 @@ export default async function ArticlePage({ params }: Props) {
                 <span className="font-mono">{refCode}</span>
               </div>
             ) : null}
+            <JournalIssnDisplay issn_print={journal.issn_print} issn_online={journal.issn_online} variant="inline" />
             <ArticleCiteButton work={citationWork} citationDownloadBaseName={refCode || articleCode} />
           </div>
           {authorAffiliations.length > 0 ? <ArticlePublicByline authors={authorAffiliations} /> : null}
@@ -179,6 +191,7 @@ export default async function ArticlePage({ params }: Props) {
         <JournalCoverImage
           src={coverSrc}
           alt={`${journal.name ?? journalSlug} cover`}
+          journalName={journal.name ?? journalSlug}
           className="aspect-[3/4] w-full max-w-[140px] shrink-0 self-start sm:max-w-[168px] md:max-w-[192px]"
           sizes="(max-width: 768px) 168px, 192px"
         />

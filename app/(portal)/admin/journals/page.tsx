@@ -6,7 +6,7 @@ export default async function AdminJournalsPage() {
   const supabase = await createClient();
   const { data: journals } = await supabase
     .from("journals")
-    .select("id, name, slug")
+    .select("id, name, slug, status, is_open_access")
     .order("name");
 
   return (
@@ -31,6 +31,11 @@ export default async function AdminJournalsPage() {
                 <div>
                   <p className="font-medium">{j.name}</p>
                   <p className="mt-1 text-sm text-muted-foreground">/j/{j.slug}</p>
+                  {(j.status || j.is_open_access) && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {[j.status, j.is_open_access ? "Open access" : null].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
                 </div>
                 <Button variant="outline" size="sm" asChild>
                   <Link href={`/admin/journals/${j.id}`}>Edit</Link>

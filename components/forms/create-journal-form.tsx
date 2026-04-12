@@ -16,6 +16,10 @@ type CreateJournalFormProps = {
     slug: string;
     submission_areas: string[] | null;
     submission_types: string[] | null;
+    issn_print: string | null;
+    issn_online: string | null;
+    status: string | null;
+    is_open_access: boolean;
   };
 };
 
@@ -98,6 +102,58 @@ export function CreateJournalForm({ journal }: CreateJournalFormProps) {
           placeholder="Research Article, Review, Short Communication"
         />
         <p className="text-xs text-slate-500">Comma-separated values.</p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-2">
+          <Label htmlFor="issn_print">ISSN (Print)</Label>
+          <Input
+            id="issn_print"
+            name="issn_print"
+            defaultValue={journal?.issn_print ?? ""}
+            placeholder="e.g. 1234-5678"
+            autoComplete="off"
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="issn_online">ISSN (Online)</Label>
+          <Input
+            id="issn_online"
+            name="issn_online"
+            defaultValue={journal?.issn_online ?? ""}
+            placeholder="e.g. 1234-567X"
+            autoComplete="off"
+          />
+        </div>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="status">Status</Label>
+        <Input
+          id="status"
+          name="status"
+          list="journal-status-suggestions"
+          defaultValue={journal?.status ?? ""}
+          placeholder="e.g. publishing, upcoming, discontinued"
+        />
+        <datalist id="journal-status-suggestions">
+          <option value="upcoming" />
+          <option value="publishing" />
+          <option value="discontinued" />
+          <option value="transferred" />
+        </datalist>
+        <p className="text-xs text-slate-500">Any label you use in the product; stored as plain text.</p>
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          id="is_open_access"
+          name="is_open_access"
+          type="checkbox"
+          value="on"
+          defaultChecked={journal?.is_open_access ?? false}
+          className="h-4 w-4 rounded border border-input text-primary accent-primary"
+        />
+        <Label htmlFor="is_open_access" className="cursor-pointer font-normal leading-none">
+          Open access
+        </Label>
       </div>
       {state?.message && (
         <p className={`text-sm ${state.ok ? "text-green-700" : "text-red-600"}`}>{state.message}</p>

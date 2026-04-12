@@ -12,6 +12,11 @@ function parseCsvArray(value: FormDataEntryValue | null): string[] {
   return Array.from(new Set(raw));
 }
 
+function optionalTrimmedText(value: FormDataEntryValue | null): string | null {
+  const s = String(value ?? "").trim();
+  return s.length ? s : null;
+}
+
 /** Shared by API route (avoids flaky Next.js server-action RPC in dev). */
 export async function saveJournalFromFormData(formData: FormData): Promise<JournalSaveResult> {
   try {
@@ -21,6 +26,10 @@ export async function saveJournalFromFormData(formData: FormData): Promise<Journ
     const slug = slugRaw ? slugify(slugRaw) : slugify(name);
     const submissionAreas = parseCsvArray(formData.get("submission_areas"));
     const submissionTypes = parseCsvArray(formData.get("submission_types"));
+    const issnPrint = optionalTrimmedText(formData.get("issn_print"));
+    const issnOnline = optionalTrimmedText(formData.get("issn_online"));
+    const status = optionalTrimmedText(formData.get("status"));
+    const isOpenAccess = formData.get("is_open_access") === "on";
 
     if (!name || !slug) {
       return { ok: false, message: "Name and slug are required." };
@@ -36,6 +45,10 @@ export async function saveJournalFromFormData(formData: FormData): Promise<Journ
           slug,
           submission_areas: submissionAreas,
           submission_types: submissionTypes,
+          issn_print: issnPrint,
+          issn_online: issnOnline,
+          status,
+          is_open_access: isOpenAccess,
         })
         .eq("id", journalId)
         .select("id")
@@ -65,6 +78,10 @@ export async function saveJournalFromFormData(formData: FormData): Promise<Journ
         slug,
         submission_areas: submissionAreas,
         submission_types: submissionTypes,
+        issn_print: issnPrint,
+        issn_online: issnOnline,
+        status,
+        is_open_access: isOpenAccess,
       })
       .select("id")
       .single();

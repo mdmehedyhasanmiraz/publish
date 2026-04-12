@@ -8,8 +8,12 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: "PublisherOS",
-  description: "Multi-journal publisher platform on Next.js + Supabase",
+  title: {
+    default: "Sciencelet",
+    template: "%s | Sciencelet",
+  },
+  description:
+    "Sciencelet is an independent STM publisher of open access journals in AI, life sciences, and related technical fields.",
 };
 
 const geistSans = Geist({

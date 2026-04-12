@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { JournalCoverImage } from "@/components/public/journal-cover-image";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -113,21 +113,13 @@ export function JournalsNavDropdownPanel(props: { open: boolean; onClose: () => 
                   className="group flex flex-col items-center gap-3 text-center"
                   onClick={() => props.onClose()}
                 >
-                  <div className="relative aspect-[3/4] w-full max-w-[140px] overflow-hidden rounded-md border border-border bg-muted/30 shadow-sm transition group-hover:border-primary/40">
-                    {j.coverSrc ? (
-                      <Image
-                        src={j.coverSrc}
-                        alt={`${j.name} cover`}
-                        fill
-                        className="object-cover"
-                        sizes="140px"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center px-2 text-xs text-muted-foreground">
-                        No cover
-                      </div>
-                    )}
-                  </div>
+                  <JournalCoverImage
+                    src={j.coverSrc}
+                    alt={`${j.name} cover`}
+                    journalName={j.name}
+                    className="aspect-[3/4] w-full max-w-[140px] transition group-hover:ring-2 group-hover:ring-primary/30"
+                    sizes="140px"
+                  />
                   <span className="line-clamp-2 text-sm font-semibold leading-snug text-foreground group-hover:text-primary">
                     {j.name}
                   </span>

@@ -11,6 +11,10 @@ type JournalEditorPageProps = {
     submission_areas: string[] | null;
     submission_types: string[] | null;
     cover_image_path: string | null;
+    issn_print: string | null;
+    issn_online: string | null;
+    status: string | null;
+    is_open_access: boolean;
   };
 };
 

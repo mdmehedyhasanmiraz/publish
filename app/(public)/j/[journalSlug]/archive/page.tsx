@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { JournalCoverImage } from "@/components/public/journal-cover-image";
+import { JournalIssnDisplay } from "@/components/public/journal-issn-display";
 import { getJournalBySlug } from "@/lib/db/journals";
 import { resolvedCoverUrl } from "@/lib/storage/covers";
 
@@ -56,6 +57,7 @@ export default async function ArchivePage({ params }: Props) {
       <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
         Issues are listed with their cover when available; otherwise the journal&apos;s default cover is shown.
       </p>
+      <JournalIssnDisplay issn_print={journal.issn_print} issn_online={journal.issn_online} className="mt-3" />
 
       {rows.length === 0 ? (
         <p className="mt-8 text-sm text-muted-foreground">No issues have been published yet.</p>
@@ -70,6 +72,7 @@ export default async function ArchivePage({ params }: Props) {
                 <JournalCoverImage
                   src={url}
                   alt={`${journal.name} · ${issue.issue_slug} cover`}
+                  journalName={journal.name}
                   className="aspect-[3/4] w-full max-w-[200px] mx-auto"
                   sizes="(max-width: 640px) 50vw, 200px"
                 />
