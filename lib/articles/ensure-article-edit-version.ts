@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** Columns needed to render the article editor (must match admin/editor pages). */
 export const ARTICLE_VERSION_ROW_SELECT =
-  "id, article_id, title, abstract, markdown_body, workflow_status, extra_metadata" as const;
+  "id, article_id, title, abstract, markdown_body, jats_xml, workflow_status, extra_metadata" as const;
 
 export type ArticleVersionRow = {
   id: string;
@@ -10,6 +10,7 @@ export type ArticleVersionRow = {
   title: string;
   abstract: string | null;
   markdown_body: string | null;
+  jats_xml?: string | null;
   workflow_status: string | null;
   extra_metadata: unknown;
 };
@@ -75,6 +76,8 @@ export async function ensureArticleHasEditVersion(
       abstract,
       markdown_body:
         "## Main text\n\nWrite the article in Markdown. Use [1], [2] for citations and list full references in the metadata fields.\n",
+      jats_xml:
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?><article xmlns:xlink=\"http://www.w3.org/1999/xlink\"><front><article-meta><title-group><article-title>Untitled</article-title></title-group></article-meta></front><body><sec><title>Main text</title><p>Write the article in Markdown. Use [1], [2] for citations and list full references in the metadata fields.</p></sec></body></article>",
       workflow_status: "draft",
       created_by: userId,
     })

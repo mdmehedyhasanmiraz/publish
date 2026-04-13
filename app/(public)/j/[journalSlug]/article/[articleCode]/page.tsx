@@ -18,6 +18,7 @@ import { buildCitationWork } from "@/lib/articles/citation-formats";
 import { getPublicSiteUrl } from "@/lib/site-url";
 import { ArticleCiteButton } from "@/components/public/article-cite-button";
 import { normalizeManuscriptReferenceCodeParam, publicArticlePath } from "@/lib/articles/public-article-path";
+import { jatsXmlToMarkdown } from "@/lib/articles/jats";
 
 type Props = { params: Promise<{ journalSlug: string; articleCode: string }> };
 
@@ -75,7 +76,7 @@ export default async function ArticlePage({ params }: Props) {
 
   const { data: version } = await supabase
     .from("article_versions")
-    .select("id, title, abstract, markdown_body, workflow_status, extra_metadata")
+    .select("id, title, abstract, markdown_body, jats_xml, workflow_status, extra_metadata")
     .eq("id", article.current_version_id as string)
     .eq("workflow_status", "published")
     .maybeSingle();
@@ -100,10 +101,13 @@ export default async function ArticlePage({ params }: Props) {
     : [];
   const coverSrc = publicCoverUrl(journal.cover_image_path ?? null);
 
-  const { html: bodyHtml, toc: bodyToc } = renderArticleMarkdownToHtmlWithToc(
-    (version.markdown_body as string) ?? "",
-    (assets ?? []) as never,
-  );
+  const mdBodyFromJats =
+    typeof (version as { jats_xml?: unknown }).jats_xml === "string" && String((version as { jats_xml: string }).jats_xml).trim()
+      ? jatsXmlToMarkdown(String((version as { jats_xml: string }).jats_xml))
+      : "";
+  const mdBody = mdBodyFromJats || ((version.markdown_body as string) ?? "");
+
+  const { html: bodyHtml, toc: bodyToc } = renderArticleMarkdownToHtmlWithToc(mdBody, (assets ?? []) as never);
 
   /** Sidebar outline: ## headings from the body, plus References when present. */
   const tocItems: ArticleTocItem[] = [

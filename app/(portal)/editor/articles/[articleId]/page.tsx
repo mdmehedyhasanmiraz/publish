@@ -10,6 +10,7 @@ import { requireArticleEditorAccess } from "@/lib/articles/require-article-edito
 import { ArticleEditorForm } from "@/components/articles/article-editor-form";
 import { loadSubmissionFilesForEditor } from "@/lib/articles/load-submission-files-for-editor";
 import { parseArticleExtraMetadata } from "@/lib/articles/extra-metadata";
+import { jatsXmlToMarkdown } from "@/lib/articles/jats";
 
 export const dynamic = "force-dynamic";
 
@@ -134,7 +135,12 @@ export default async function EditorArticleEditPage({
           initialAbstract={((version.abstract as string | null) ?? (article.abstract as string | null) ?? "") as string}
           initialDoi={(article.doi as string | null) ?? ""}
           initialKeywords={(article.keywords as string[] | null) ?? []}
-          initialMarkdownBody={(version.markdown_body as string) ?? ""}
+          initialMarkdownBody={
+            (typeof (version as { jats_xml?: unknown }).jats_xml === "string" &&
+            String((version as { jats_xml: string }).jats_xml).trim()
+              ? jatsXmlToMarkdown(String((version as { jats_xml: string }).jats_xml))
+              : (version.markdown_body as string)) ?? ""
+          }
           initialIssueId={(article.issue_id as string | null) ?? null}
           workflowStatus={(version.workflow_status as string) ?? "draft"}
           issueOptions={(issues ?? []) as never}

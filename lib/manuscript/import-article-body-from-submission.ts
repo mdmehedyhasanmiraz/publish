@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { docxBufferToArticleMarkdownBody } from "@/lib/manuscript/docx-to-article-body";
+import { markdownToJatsXml } from "@/lib/articles/jats";
 
 export type ImportManuscriptBodyResult =
   | { ok: true; markdown: string; warnings: string[] }
@@ -82,6 +83,20 @@ export async function runImportArticleBodyFromSubmission(
     });
     if (!markdown.trim()) {
       return { ok: false, message: "No body text could be extracted from the DOCX." };
+    }
+    p(86, "Saving JATS XML…");
+    const { data: cur } = await supabase
+      .from("articles")
+      .select("current_version_id, title, abstract")
+      .eq("id", articleId)
+      .maybeSingle();
+    const versionId = (cur?.current_version_id as string | null) ?? null;
+    if (versionId) {
+      const title = String(cur?.title ?? "").trim() || "Untitled";
+      const abstract = cur?.abstract ? String(cur.abstract).trim() : null;
+      const jatsXml = markdownToJatsXml({ title, abstract, markdownBody: markdown });
+      // Do not overwrite editor markdown here; the editor flow sets markdownBody in the UI.
+      await supabase.from("article_versions").update({ jats_xml: jatsXml }).eq("id", versionId).eq("article_id", articleId);
     }
     p(94, "Validating extracted text…");
     p(100, "Import complete.");

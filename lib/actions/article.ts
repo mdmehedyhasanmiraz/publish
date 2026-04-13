@@ -16,6 +16,7 @@ import {
   type ImportManuscriptBodyResult,
 } from "@/lib/manuscript/import-article-body-from-submission";
 import { publicArticlePath } from "@/lib/articles/public-article-path";
+import { markdownToJatsXml } from "@/lib/articles/jats";
 
 type ActionResult = { ok: boolean; message?: string };
 
@@ -115,6 +116,12 @@ export async function ensureArticleForSubmissionAction(submissionId: string) {
       abstract,
       markdown_body:
         "## Main text\n\nWrite the article in Markdown. Use [1], [2] for citations and list full references in the metadata fields.\n",
+      jats_xml: markdownToJatsXml({
+        title,
+        abstract,
+        markdownBody:
+          "## Main text\n\nWrite the article in Markdown. Use [1], [2] for citations and list full references in the metadata fields.\n",
+      }),
       workflow_status: "draft",
       created_by: userId,
     })
@@ -221,6 +228,7 @@ export async function createArticleDraftAction(input: {
       title,
       abstract: null,
       markdown_body: "",
+      jats_xml: markdownToJatsXml({ title, abstract: null, markdownBody: "" }),
       workflow_status: "draft",
       created_by: userId,
     })
@@ -286,6 +294,11 @@ export async function saveArticleVersionAction(input: {
       title,
       abstract: input.abstract.trim() || null,
       markdown_body: input.markdownBody,
+      jats_xml: markdownToJatsXml({
+        title,
+        abstract: input.abstract.trim() || null,
+        markdownBody: input.markdownBody,
+      }),
       extra_metadata: extraMeta,
     })
     .eq("id", input.versionId)
