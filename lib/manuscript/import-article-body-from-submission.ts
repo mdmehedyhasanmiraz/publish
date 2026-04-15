@@ -1,15 +1,57 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { docxBufferToArticleMarkdownBody } from "@/lib/manuscript/docx-to-article-body";
 import { markdownToJatsXml } from "@/lib/articles/jats";
+import { extractReferenceEntryTexts } from "@/lib/manuscript/references-from-markdown";
+import { extractReferenceEntryTextsFromHtml } from "@/lib/manuscript/references-from-html";
+import type { PublicArticleAuthorRow } from "@/lib/articles/public-article-authors";
 
 export type ImportManuscriptBodyResult =
-  | { ok: true; markdown: string; warnings: string[] }
+  | { ok: true; jatsXml: string; warnings: string[] }
   | { ok: false; message: string };
 
 export type ImportManuscriptProgress = { percent: number; message: string };
 
+const REFERENCES_HEADING = /^#{1,3}\s*references\s*:?\s*\.?\s*$/i;
+const ANY_HEADING = /^#{1,3}\s+/;
+
+function stripExistingReferencesSection(markdown: string): string {
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  let start = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (REFERENCES_HEADING.test(lines[i].trim())) {
+      start = i;
+      break;
+    }
+  }
+  if (start < 0) return markdown.trim();
+
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (ANY_HEADING.test(lines[i].trim())) {
+      end = i;
+      break;
+    }
+  }
+
+  const before = lines.slice(0, start).join("\n").trim();
+  const after = lines.slice(end).join("\n").trim();
+  if (before && after) return `${before}\n\n${after}`.trim();
+  return (before || after).trim();
+}
+
+function injectReferencesIntoMarkdown(markdown: string, referenceEntries: string[]): string {
+  if (!referenceEntries.length) return markdown.trim();
+  const body = stripExistingReferencesSection(markdown);
+  const refBlock = [
+    "## References",
+    "",
+    ...referenceEntries.map((entry, idx) => `[${idx + 1}] ${entry.trim()}`),
+  ].join("\n");
+  return body ? `${body}\n\n${refBlock}` : refBlock;
+}
+
 /**
- * Loads the submission’s latest .docx and converts it to article Markdown.
+ * Loads the submission’s latest .docx and converts it to article JATS XML.
  * `onProgress` is invoked at real phase boundaries (DB, storage, conversion).
  */
 export async function runImportArticleBodyFromSubmission(
@@ -30,6 +72,14 @@ export async function runImportArticleBodyFromSubmission(
     return { ok: false, message: "This article is not linked to a submission with manuscript files." };
   }
   const submissionId = article.submission_id as string;
+  const { data: subMeta } = await supabase
+    .from("submissions")
+    .select("author_affiliations")
+    .eq("id", submissionId)
+    .maybeSingle();
+  const manuscriptAuthors: PublicArticleAuthorRow[] = Array.isArray(subMeta?.author_affiliations)
+    ? (subMeta.author_affiliations as PublicArticleAuthorRow[])
+    : [];
 
   p(12, "Finding latest manuscript file…");
 
@@ -72,18 +122,29 @@ export async function runImportArticleBodyFromSubmission(
   const buf = await blob.arrayBuffer();
 
   try {
-    const { markdown, warnings } = await docxBufferToArticleMarkdownBody(buf, {
+    const { markdown, html, warnings: conversionWarnings } = await docxBufferToArticleMarkdownBody(buf, {
       onPhase: (phase) => {
         if (phase === "word_to_html") {
           p(52, "Converting Word document to HTML…");
         } else if (phase === "html_to_markdown") {
-          p(72, "Building Markdown (headings, figures, tables)…");
+          p(72, "Building JATS XML body…");
         }
       },
     });
     if (!markdown.trim()) {
       return { ok: false, message: "No body text could be extracted from the DOCX." };
     }
+    p(80, 'Extracting "References" section…');
+    let { entries: referenceEntries, warnings: referenceWarnings } = extractReferenceEntryTexts(markdown);
+    if (!referenceEntries.length && html.trim()) {
+      const fromHtml = extractReferenceEntryTextsFromHtml(html);
+      if (fromHtml.entries.length) {
+        referenceEntries = fromHtml.entries;
+        referenceWarnings = [...referenceWarnings, ...fromHtml.warnings];
+      }
+    }
+    const markdownWithReferences = injectReferencesIntoMarkdown(markdown, referenceEntries);
+
     p(86, "Saving JATS XML…");
     const { data: cur } = await supabase
       .from("articles")
@@ -91,16 +152,28 @@ export async function runImportArticleBodyFromSubmission(
       .eq("id", articleId)
       .maybeSingle();
     const versionId = (cur?.current_version_id as string | null) ?? null;
+    let jatsXml = "";
     if (versionId) {
       const title = String(cur?.title ?? "").trim() || "Untitled";
       const abstract = cur?.abstract ? String(cur.abstract).trim() : null;
-      const jatsXml = markdownToJatsXml({ title, abstract, markdownBody: markdown });
-      // Do not overwrite editor markdown here; the editor flow sets markdownBody in the UI.
+      jatsXml = markdownToJatsXml({
+        title,
+        abstract,
+        markdownBody: markdownWithReferences,
+        authors: manuscriptAuthors,
+      });
       await supabase.from("article_versions").update({ jats_xml: jatsXml }).eq("id", versionId).eq("article_id", articleId);
+    } else {
+      jatsXml = markdownToJatsXml({
+        title: "Untitled",
+        abstract: null,
+        markdownBody: markdownWithReferences,
+        authors: manuscriptAuthors,
+      });
     }
     p(94, "Validating extracted text…");
     p(100, "Import complete.");
-    return { ok: true, markdown, warnings };
+    return { ok: true, jatsXml, warnings: [...conversionWarnings, ...referenceWarnings] };
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Could not convert DOCX." };
   }

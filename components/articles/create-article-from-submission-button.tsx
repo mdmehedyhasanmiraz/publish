@@ -29,7 +29,7 @@ export function CreateArticleFromSubmissionButton(props: { submissionId: string 
           });
         }}
       >
-        {pending ? "Creating…" : "Create article draft (Markdown)"}
+        {pending ? "Creating…" : "Create article draft (JATS XML)"}
       </Button>
       {message ? <span className="text-sm text-destructive">{message}</span> : null}
     </div>

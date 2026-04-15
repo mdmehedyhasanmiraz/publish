@@ -37,7 +37,7 @@ export async function POST(req: Request) {
           send({
             type: "result",
             ok: true,
-            markdown: result.markdown,
+            jatsXml: result.jatsXml,
             warnings: result.warnings,
           });
         } else {

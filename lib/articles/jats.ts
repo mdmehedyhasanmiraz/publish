@@ -1,3 +1,6 @@
+import type { PublicArticleAuthorRow } from "@/lib/articles/public-article-authors";
+import { formatAffiliationFootnoteText } from "@/lib/articles/public-article-authors";
+
 function escapeXml(s: string) {
   return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
 }
@@ -26,6 +29,31 @@ function normalizeWhitespace(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
+const SUPSUB_TOKEN_RE = /\uE100(\d+)\uE100/g;
+
+function xmlInlineToMarkdown(raw: string): string {
+  const preserved: string[] = [];
+  let t = raw;
+  t = t.replace(/<(sup|sub)\b[^>]*>([\s\S]*?)<\/\1>/gi, (full) => {
+    const m = full.match(/^<(sup|sub)\b[^>]*>([\s\S]*?)<\/\1>$/i);
+    if (!m) return "";
+    const idx = preserved.length;
+    preserved.push(`<${m[1].toLowerCase()}>${unescapeXml(stripTags(m[2] ?? ""))}</${m[1].toLowerCase()}>`);
+    return `\uE100${idx}\uE100`;
+  });
+  t = t.replace(/<italic\b[^>]*>([\s\S]*?)<\/italic>/gi, (_, a: string) => `*${unescapeXml(stripTags(a))}*`);
+  t = t.replace(/<bold\b[^>]*>([\s\S]*?)<\/bold>/gi, (_, a: string) => `**${unescapeXml(stripTags(a))}**`);
+  t = t.replace(
+    /<ext-link\b[^>]*xlink:href\s*=\s*"([^"]+)"[^>]*>([\s\S]*?)<\/ext-link>/gi,
+    (_full, href: string, inner: string) => {
+      const label = normalizeWhitespace(unescapeXml(stripTags(inner))) || href;
+      return `[${label}](${href})`;
+    },
+  );
+  t = unescapeXml(stripTags(t));
+  return normalizeWhitespace(t).replace(SUPSUB_TOKEN_RE, (_, i) => preserved[Number(i)] ?? "");
+}
+
 /**
  * Minimal Markdown → JATS generator for your current editor/import flow.
  * - Preserves {{figure:...}} / {{table:...}} as paragraph text so your asset rendering still works.
@@ -38,6 +66,7 @@ export function markdownToJatsXml(input: {
   title: string;
   abstract?: string | null;
   markdownBody: string;
+  authors?: PublicArticleAuthorRow[];
 }): string {
   const title = normalizeWhitespace(input.title || "Untitled");
   const abstract = (input.abstract ?? "").trim();
@@ -45,6 +74,8 @@ export function markdownToJatsXml(input: {
 
   const bodyLines = md.length ? md.split("\n") : [];
   const blocks: string[] = [];
+  const refs: Array<{ n: string; text: string }> = [];
+  const authors = Array.isArray(input.authors) ? input.authors : [];
 
   // Very small inline conversion: keep <sup>/<sub>, convert ** and *.
   const inlineToJats = (raw: string) => {
@@ -120,6 +151,14 @@ export function markdownToJatsXml(input: {
   flushParaBuffer(paraBuf);
 
   for (const sec of secs) {
+    if (normalizeWhitespace(sec.title).toLowerCase() === "references") {
+      for (const p of sec.paras) {
+        const m = p.match(/^\[(\d+)\]\s*(.*)$/);
+        if (m) refs.push({ n: m[1], text: m[2].trim() });
+        else refs.push({ n: String(refs.length + 1), text: p.trim() });
+      }
+      continue;
+    }
     const titleXml = `<title>${inlineToJats(sec.title)}</title>`;
     const parasXml = sec.paras.map((p) => `<p>${inlineToJats(p)}</p>`).join("");
     // We don’t build nested sec trees yet; we store everything as top-level secs.
@@ -129,6 +168,67 @@ export function markdownToJatsXml(input: {
   const abstractXml = abstract
     ? `<abstract><p>${inlineToJats(abstract)}</p></abstract>`
     : "";
+  const contribXml = (() => {
+    if (!authors.length) return "";
+    const affIndexByKey = new Map<string, number>();
+    const affTexts: string[] = [];
+    const keyOf = (author: PublicArticleAuthorRow, af: NonNullable<PublicArticleAuthorRow["affiliations"]>[number]) =>
+      [
+        String(af.department ?? "").trim().toLowerCase(),
+        String(af.institution_name ?? "").trim().toLowerCase(),
+        String(af.city ?? author.city ?? "").trim().toLowerCase(),
+        String(af.country_code ?? author.country_code ?? "").trim().toLowerCase(),
+      ].join("|");
+
+    const contribs = authors.map((author) => {
+      const given = normalizeWhitespace([author.first_name, author.middle_name].filter(Boolean).join(" "));
+      const surname = normalizeWhitespace([author.last_name, author.suffix].filter(Boolean).join(" "));
+      const fallback = normalizeWhitespace(author.display_name ?? "") || "Author";
+      const nameXml =
+        given || surname
+          ? `<name>${given ? `<given-names>${escapeXml(given)}</given-names>` : ""}${surname ? `<surname>${escapeXml(surname)}</surname>` : ""}</name>`
+          : `<string-name>${escapeXml(fallback)}</string-name>`;
+
+      const affRefs: number[] = [];
+      const affs = Array.isArray(author.affiliations) ? author.affiliations : [];
+      for (const af of affs) {
+        const text = formatAffiliationFootnoteText(af, author).trim();
+        if (!text) continue;
+        const key = keyOf(author, af);
+        if (!affIndexByKey.has(key)) {
+          affIndexByKey.set(key, affTexts.length + 1);
+          affTexts.push(text);
+        }
+        const idx = affIndexByKey.get(key);
+        if (idx && !affRefs.includes(idx)) affRefs.push(idx);
+      }
+
+      const xrefs = affRefs.map((n) => `<xref ref-type="aff" rid="aff${n}">${n}</xref>`).join("");
+      const orcid = String(author.orcid_id ?? "").trim();
+      const orcidHref = orcid
+        ? /^https?:\/\//i.test(orcid)
+          ? orcid
+          : `https://orcid.org/${orcid.replace(/^\/+/, "")}`
+        : "";
+      const orcidXml = orcidHref
+        ? `<contrib-id contrib-id-type="orcid">${escapeXml(orcidHref.replace(/^https?:\/\/orcid\.org\//i, ""))}</contrib-id>`
+        : "";
+      return `<contrib contrib-type="author">${nameXml}${xrefs}${orcidXml}</contrib>`;
+    });
+
+    const affXml = affTexts
+      .map((text, i) => `<aff id="aff${i + 1}"><label>${i + 1}</label>${escapeXml(text)}</aff>`)
+      .join("");
+    return `<contrib-group>${contribs.join("")}</contrib-group>${affXml}`;
+  })();
+  const backXml = refs.length
+    ? `<back><ref-list><title>References</title>${refs
+        .map(
+          (r) =>
+            `<ref id="R${escapeXml(r.n)}"><label>${escapeXml(r.n)}</label><mixed-citation>${inlineToJats(r.text)}</mixed-citation></ref>`,
+        )
+        .join("")}</ref-list></back>`
+    : "";
 
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
@@ -136,10 +236,12 @@ export function markdownToJatsXml(input: {
     `<front>`,
     `<article-meta>`,
     `<title-group><article-title>${inlineToJats(title)}</article-title></title-group>`,
+    contribXml,
     abstractXml,
     `</article-meta>`,
     `</front>`,
     `<body>${blocks.join("")}</body>`,
+    backXml,
     `</article>`,
   ].join("");
 }
@@ -156,21 +258,7 @@ export function jatsXmlToMarkdown(jatsXml: string): string {
   const bodyMatch = xml.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i);
   const body = bodyMatch?.[1] ?? xml;
 
-  // Replace common inline tags to Markdown-ish forms.
   let t = body;
-  t = t.replace(/<italic\b[^>]*>([\s\S]*?)<\/italic>/gi, (_, a: string) => `*${unescapeXml(stripTags(a))}*`);
-  t = t.replace(/<bold\b[^>]*>([\s\S]*?)<\/bold>/gi, (_, a: string) => `**${unescapeXml(stripTags(a))}**`);
-  t = t.replace(/<sup\b[^>]*>([\s\S]*?)<\/sup>/gi, (_, a: string) => `<sup>${unescapeXml(stripTags(a))}</sup>`);
-  t = t.replace(/<sub\b[^>]*>([\s\S]*?)<\/sub>/gi, (_, a: string) => `<sub>${unescapeXml(stripTags(a))}</sub>`);
-
-  // ext-link / uri / inline links (best-effort)
-  t = t.replace(
-    /<ext-link\b[^>]*xlink:href\s*=\s*"([^"]+)"[^>]*>([\s\S]*?)<\/ext-link>/gi,
-    (_full, href: string, inner: string) => {
-      const label = normalizeWhitespace(unescapeXml(stripTags(inner))) || href;
-      return `[${label}](${href})`;
-    },
-  );
 
   // Sections: <sec><title>..</title>...</sec> → ## Title + paragraphs
   const out: string[] = [];
@@ -179,17 +267,44 @@ export function jatsXmlToMarkdown(jatsXml: string): string {
   while ((sm = secRe.exec(t)) !== null) {
     const secInner = sm[1] ?? "";
     const titleMatch = secInner.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
-    const title = titleMatch ? normalizeWhitespace(unescapeXml(stripTags(titleMatch[1] ?? ""))) : "";
+    const title = titleMatch ? xmlInlineToMarkdown(titleMatch[1] ?? "") : "";
     if (title) out.push(`## ${title}`);
     const pRe = /<p\b[^>]*>([\s\S]*?)<\/p>/gi;
     let pm: RegExpExecArray | null;
     const paras: string[] = [];
     while ((pm = pRe.exec(secInner)) !== null) {
       const inner = pm[1] ?? "";
-      const plain = normalizeWhitespace(unescapeXml(stripTags(inner)));
+      const plain = xmlInlineToMarkdown(inner);
       if (plain) paras.push(plain);
     }
     if (paras.length) out.push(paras.join("\n\n"));
+  }
+
+  // Parse back/ref-list for standard JATS references.
+  const refsOut: string[] = [];
+  const refListMatch = xml.match(/<ref-list\b[^>]*>([\s\S]*?)<\/ref-list>/i);
+  if (refListMatch) {
+    const refInner = refListMatch[1] ?? "";
+    const refRe = /<ref\b[^>]*>([\s\S]*?)<\/ref>/gi;
+    let rm: RegExpExecArray | null;
+    while ((rm = refRe.exec(refInner)) !== null) {
+      const one = rm[1] ?? "";
+      const labelMatch = one.match(/<label\b[^>]*>([\s\S]*?)<\/label>/i);
+      const mixedMatch = one.match(/<mixed-citation\b[^>]*>([\s\S]*?)<\/mixed-citation>/i);
+      const citMatch = one.match(/<element-citation\b[^>]*>([\s\S]*?)<\/element-citation>/i);
+      const label = labelMatch ? normalizeWhitespace(unescapeXml(stripTags(labelMatch[1] ?? ""))) : "";
+      const text = mixedMatch
+        ? xmlInlineToMarkdown(mixedMatch[1] ?? "")
+        : citMatch
+          ? xmlInlineToMarkdown(citMatch[1] ?? "")
+          : xmlInlineToMarkdown(one);
+      if (text) refsOut.push(`[${label || String(refsOut.length + 1)}] ${text}`);
+    }
+  }
+
+  if (refsOut.length) {
+    out.push("## References");
+    out.push(...refsOut);
   }
 
   if (out.length) return out.join("\n\n").trim();
@@ -200,7 +315,7 @@ export function jatsXmlToMarkdown(jatsXml: string): string {
   let pm: RegExpExecArray | null;
   while ((pm = pRe.exec(t)) !== null) {
     const inner = pm[1] ?? "";
-    const plain = normalizeWhitespace(unescapeXml(stripTags(inner)));
+    const plain = xmlInlineToMarkdown(inner);
     if (plain) paras.push(plain);
   }
   return paras.join("\n\n").trim();

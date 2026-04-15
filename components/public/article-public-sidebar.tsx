@@ -24,7 +24,9 @@ export function ArticlePublicSidebar(props: {
               <li key={`${item.id}-${item.text}`}>
                 <a
                   href={`#${item.id}`}
-                  className="text-muted-foreground transition-colors hover:text-foreground [overflow-wrap:anywhere]"
+                  className={`block text-muted-foreground transition-colors hover:text-foreground [overflow-wrap:anywhere] ${
+                    item.level === 3 ? "pl-4 text-xs" : ""
+                  }`}
                 >
                   {item.text}
                 </a>

@@ -9,8 +9,6 @@ import {
 import { requireArticleEditorAccess } from "@/lib/articles/require-article-editor-access";
 import { ArticleEditorForm } from "@/components/articles/article-editor-form";
 import { loadSubmissionFilesForEditor } from "@/lib/articles/load-submission-files-for-editor";
-import { parseArticleExtraMetadata } from "@/lib/articles/extra-metadata";
-import { jatsXmlToMarkdown } from "@/lib/articles/jats";
 
 export const dynamic = "force-dynamic";
 
@@ -121,8 +119,6 @@ export default async function AdminArticleEditPage({
     supabase.from("issues").select("id, issue_slug, volumes(volume_slug)").order("issue_slug", { ascending: false }),
   ]);
 
-  const extra = parseArticleExtraMetadata(version.extra_metadata);
-
   return (
     <div className="mx-auto max-w-5xl px-4 pb-12 pt-4">
       <ArticleEditorForm
@@ -132,11 +128,12 @@ export default async function AdminArticleEditPage({
         initialAbstract={((version.abstract as string | null) ?? (article.abstract as string | null) ?? "") as string}
         initialDoi={(article.doi as string | null) ?? ""}
         initialKeywords={(article.keywords as string[] | null) ?? []}
-        initialMarkdownBody={
+        initialJatsXmlBody={
           (typeof (version as { jats_xml?: unknown }).jats_xml === "string" &&
           String((version as { jats_xml: string }).jats_xml).trim()
-            ? jatsXmlToMarkdown(String((version as { jats_xml: string }).jats_xml))
-            : (version.markdown_body as string)) ?? ""
+            ? String((version as { jats_xml: string }).jats_xml)
+            : "<?xml version=\"1.0\" encoding=\"UTF-8\"?><article xmlns:xlink=\"http://www.w3.org/1999/xlink\"><front><article-meta><title-group><article-title>Untitled</article-title></title-group></article-meta></front><body><sec><title>Main text</title><p></p></sec></body></article>") ??
+          ""
         }
         initialIssueId={(article.issue_id as string | null) ?? null}
         workflowStatus={(version.workflow_status as string) ?? "draft"}
@@ -144,9 +141,6 @@ export default async function AdminArticleEditPage({
         assets={(assets ?? []) as never}
         submissionId={submissionId}
         submissionFiles={submissionFiles}
-        initialAcknowledgement={extra.acknowledgement ?? ""}
-        initialCompetingInterests={extra.competing_interests ?? ""}
-        initialReferences={extra.references}
         editorContext="admin"
         journalSlug={journalSlug}
         articleCodeForPublic={

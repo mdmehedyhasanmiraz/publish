@@ -1,13 +1,12 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import {
   publishArticleVersionAction,
   saveArticleVersionAction,
   unpublishArticleAction,
 } from "@/lib/actions/article";
-import type { ArticleReferenceRow } from "@/lib/articles/extra-metadata";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,6 +17,7 @@ import { ArticlePreview } from "@/components/articles/article-preview";
 import { SubmissionFilesPanel, type SubmissionFileRow } from "@/components/articles/submission-files-panel";
 import Link from "next/link";
 import { publicArticlePath } from "@/lib/articles/public-article-path";
+import { jatsXmlToMarkdown } from "@/lib/articles/jats";
 
 type Asset = {
   id: string;
@@ -36,7 +36,7 @@ async function importManuscriptViaStream(
   articleId: string,
   onProgress: (percent: number, message: string) => void,
 ): Promise<
-  | { ok: true; markdown: string; warnings: string[] }
+  | { ok: true; jatsXml: string; warnings: string[] }
   | { ok: false; message: string }
 > {
   const res = await fetch("/api/articles/import-manuscript-body", {
@@ -63,7 +63,7 @@ async function importManuscriptViaStream(
   const decoder = new TextDecoder();
   let buffer = "";
   let outcome:
-    | { ok: true; markdown: string; warnings: string[] }
+    | { ok: true; jatsXml: string; warnings: string[] }
     | { ok: false; message: string }
     | null = null;
 
@@ -88,8 +88,8 @@ async function importManuscriptViaStream(
       if (msg.type === "progress" && typeof msg.percent === "number" && typeof msg.message === "string") {
         onProgress(Math.max(0, Math.min(100, msg.percent)), msg.message);
       } else if (msg.type === "result") {
-        if (msg.ok === true && typeof msg.markdown === "string" && Array.isArray(msg.warnings)) {
-          outcome = { ok: true, markdown: msg.markdown, warnings: msg.warnings as string[] };
+        if (msg.ok === true && typeof msg.jatsXml === "string" && Array.isArray(msg.warnings)) {
+          outcome = { ok: true, jatsXml: msg.jatsXml, warnings: msg.warnings as string[] };
         } else if (msg.ok === false && typeof msg.message === "string") {
           outcome = { ok: false, message: msg.message };
         } else {
@@ -105,89 +105,6 @@ async function importManuscriptViaStream(
   return outcome;
 }
 
-function isArticleReferenceRow(x: unknown): x is ArticleReferenceRow {
-  if (!x || typeof x !== "object") return false;
-  const o = x as Record<string, unknown>;
-  return typeof o.text === "string";
-}
-
-async function importReferencesFromManuscriptViaStream(
-  articleId: string,
-  onProgress: (percent: number, message: string) => void,
-): Promise<
-  | { ok: true; references: ArticleReferenceRow[]; warnings: string[] }
-  | { ok: false; message: string }
-> {
-  const res = await fetch("/api/articles/import-references", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ articleId }),
-    credentials: "same-origin",
-  });
-
-  if (!res.ok) {
-    try {
-      const j = (await res.json()) as { message?: string };
-      return { ok: false, message: j.message ?? `Request failed (${res.status}).` };
-    } catch {
-      return { ok: false, message: `Request failed (${res.status}).` };
-    }
-  }
-
-  const reader = res.body?.getReader();
-  if (!reader) {
-    return { ok: false, message: "No response stream from server." };
-  }
-
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let outcome:
-    | { ok: true; references: ArticleReferenceRow[]; warnings: string[] }
-    | { ok: false; message: string }
-    | null = null;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    for (;;) {
-      const nl = buffer.indexOf("\n");
-      if (nl < 0) break;
-      const line = buffer.slice(0, nl).trim();
-      buffer = buffer.slice(nl + 1);
-      if (!line) continue;
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(line) as unknown;
-      } catch {
-        continue;
-      }
-      if (!parsed || typeof parsed !== "object") continue;
-      const msg = parsed as Record<string, unknown>;
-      if (msg.type === "progress" && typeof msg.percent === "number" && typeof msg.message === "string") {
-        onProgress(Math.max(0, Math.min(100, msg.percent)), msg.message);
-      } else if (msg.type === "result") {
-        if (msg.ok === true && Array.isArray(msg.warnings)) {
-          const refs = msg.references;
-          if (!Array.isArray(refs) || !refs.every(isArticleReferenceRow)) {
-            outcome = { ok: false, message: "Invalid server response." };
-          } else {
-            outcome = { ok: true, references: refs, warnings: msg.warnings as string[] };
-          }
-        } else if (msg.ok === false && typeof msg.message === "string") {
-          outcome = { ok: false, message: msg.message };
-        } else {
-          outcome = { ok: false, message: "Invalid server response." };
-        }
-      }
-    }
-  }
-
-  if (!outcome) {
-    return { ok: false, message: "Import did not complete." };
-  }
-  return outcome;
-}
 
 function CopyTextButton(props: { label: string; text: string }) {
   const [done, setDone] = useState(false);
@@ -216,16 +133,13 @@ export function ArticleEditorForm(props: {
   initialAbstract: string;
   initialDoi: string;
   initialKeywords: string[];
-  initialMarkdownBody: string;
+  initialJatsXmlBody: string;
   initialIssueId: string | null;
   workflowStatus: string;
   issueOptions: IssueOption[];
   assets: Asset[];
   submissionId?: string | null;
   submissionFiles?: SubmissionFileRow[];
-  initialAcknowledgement?: string;
-  initialCompetingInterests?: string;
-  initialReferences?: ArticleReferenceRow[];
   /** Admin article desk: extra navigation and context. */
   editorContext?: "default" | "admin";
   journalSlug?: string | null;
@@ -242,36 +156,16 @@ export function ArticleEditorForm(props: {
   const [importProgressPercent, setImportProgressPercent] = useState(0);
   const [importProgressMessage, setImportProgressMessage] = useState("");
   const [importNote, setImportNote] = useState<string | null>(null);
-  const [refsImportBusy, setRefsImportBusy] = useState(false);
-  const [refsImportProgressPercent, setRefsImportProgressPercent] = useState(0);
-  const [refsImportProgressMessage, setRefsImportProgressMessage] = useState("");
-  const [refsImportNote, setRefsImportNote] = useState<string | null>(null);
-  const refsFileInputRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState("");
   const [title, setTitle] = useState(props.initialTitle);
   const [abstractText, setAbstractText] = useState(props.initialAbstract);
   const [doi, setDoi] = useState(props.initialDoi);
   const [keywordsCsv, setKeywordsCsv] = useState((props.initialKeywords ?? []).join(", "));
-  const [markdownBody, setMarkdownBody] = useState(props.initialMarkdownBody);
+  const [jatsXmlBody, setJatsXmlBody] = useState(props.initialJatsXmlBody);
   const [issueId, setIssueId] = useState(props.initialIssueId ?? "");
-  const [acknowledgement, setAcknowledgement] = useState(props.initialAcknowledgement ?? "");
-  const [competingInterests, setCompetingInterests] = useState(props.initialCompetingInterests ?? "");
-  const [references, setReferences] = useState<ArticleReferenceRow[]>(() => {
-    const r = props.initialReferences;
-    if (r?.length) return r;
-    return [{ text: "" }];
-  });
 
   function save() {
     startTransition(async () => {
-      const refPayload = references
-        .map((r) => ({
-          text: r.text.trim(),
-          doi: r.doi?.trim() || undefined,
-          google_scholar_url: r.google_scholar_url?.trim() || undefined,
-        }))
-        .filter((r) => r.text.length > 0);
-
       const res = await saveArticleVersionAction({
         articleId: props.articleId,
         versionId: props.versionId,
@@ -279,23 +173,12 @@ export function ArticleEditorForm(props: {
         abstract: abstractText,
         doi,
         keywordsCsv,
-        markdownBody,
+        jatsXmlBody,
         issueId: issueId || null,
-        acknowledgement,
-        competingInterests,
-        references: refPayload,
       });
       setMessage(res.message ?? (res.ok ? "Saved." : "Could not save."));
     });
   }
-
-  const refsForPreview: ArticleReferenceRow[] = references
-    .map((r) => ({
-      text: r.text.trim(),
-      doi: r.doi?.trim() || undefined,
-      google_scholar_url: r.google_scholar_url?.trim() || undefined,
-    }))
-    .filter((r) => r.text.length > 0);
 
   const publicArticleHref =
     props.journalSlug && props.articleCodeForPublic?.trim()
@@ -354,7 +237,7 @@ export function ArticleEditorForm(props: {
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={pending || publishPending || unpublishPending || importBusy || refsImportBusy}
+                disabled={pending || publishPending || unpublishPending || importBusy}
                 onClick={save}
               >
                 {pending ? "Saving…" : "Save"}
@@ -374,7 +257,7 @@ export function ArticleEditorForm(props: {
                   variant="outline"
                   size="sm"
                   className="border-amber-300 text-amber-900 hover:bg-amber-50"
-                  disabled={unpublishPending || publishPending || importBusy || refsImportBusy}
+                  disabled={unpublishPending || publishPending || importBusy}
                   onClick={unpublishPublicly}
                 >
                   {unpublishPending ? "Unpublishing…" : "Unpublish"}
@@ -414,7 +297,7 @@ export function ArticleEditorForm(props: {
             type="button"
             variant="outline"
             size="sm"
-            disabled={pending || publishPending || importBusy || refsImportBusy}
+            disabled={pending || publishPending || importBusy}
             onClick={save}
           >
             {pending ? "Saving…" : "Save"}
@@ -437,11 +320,7 @@ export function ArticleEditorForm(props: {
 
       <section className="rounded-lg border bg-white p-5">
         <h1 className={`font-semibold ${props.editorContext === "admin" ? "text-lg" : "text-2xl"}`}>Article editor</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Markdown: headings, <code>**bold**</code>, <code>*italic*</code>, <code>`code`</code>, citations{" "}
-          <code>[1]</code>, <code>[2]</code> (match numbered references below). Figures/tables:{" "}
-          <code>{"{{figure:fig-1}}"}</code>, <code>{"{{table:tbl-1}}"}</code>
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">Edit the core article body as raw JATS XML.</p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <div className="grid gap-2">
             <Label>Title</Label>
@@ -453,7 +332,7 @@ export function ArticleEditorForm(props: {
           </div>
           <div className="grid gap-2 md:col-span-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <Label>Abstract (Markdown)</Label>
+              <Label>Abstract</Label>
               <CopyTextButton label="Copy abstract" text={abstractText} />
             </div>
             <Textarea rows={6} value={abstractText} onChange={(e) => setAbstractText(e.target.value)} />
@@ -485,219 +364,8 @@ export function ArticleEditorForm(props: {
       </section>
 
       <section className="rounded-lg border bg-white p-5">
-        <h2 className="text-lg font-semibold">Other sections (stored as JSON metadata)</h2>
-        <div className="mt-4 grid gap-4">
-          <div className="grid gap-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Label>Acknowledgements (plain text or Markdown)</Label>
-              <CopyTextButton label="Copy" text={acknowledgement} />
-            </div>
-            <Textarea rows={3} value={acknowledgement} onChange={(e) => setAcknowledgement(e.target.value)} />
-          </div>
-          <div className="grid gap-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Label>Competing interests</Label>
-              <CopyTextButton label="Copy" text={competingInterests} />
-            </div>
-            <Textarea rows={3} value={competingInterests} onChange={(e) => setCompetingInterests(e.target.value)} />
-          </div>
-        </div>
-      </section>
-
-      <section className="rounded-lg border bg-white p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">References</h2>
-          <div className="flex flex-wrap items-center gap-2">
-            {props.submissionId ? (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={refsImportBusy || pending}
-                onClick={() => {
-                  if (
-                    !confirm(
-                      'Replace all reference rows with entries scraped from the "References" section of the latest submission manuscript (.docx)?\n\n' +
-                        "DOI (when detected), Google Scholar search links, and Crossref search links are filled in automatically in the preview.",
-                    )
-                  ) {
-                    return;
-                  }
-                  setRefsImportNote(null);
-                  setRefsImportBusy(true);
-                  setRefsImportProgressPercent(0);
-                  setRefsImportProgressMessage("Starting…");
-                  void importReferencesFromManuscriptViaStream(props.articleId, (pct, msg) => {
-                    setRefsImportProgressPercent(pct);
-                    setRefsImportProgressMessage(msg);
-                  }).then((r) => {
-                    setRefsImportBusy(false);
-                    setRefsImportProgressPercent(0);
-                    setRefsImportProgressMessage("");
-                    if (!r.ok) {
-                      setRefsImportNote(r.message);
-                      return;
-                    }
-                    setReferences(r.references.length ? r.references : [{ text: "" }]);
-                    setRefsImportNote(
-                      r.warnings.length
-                        ? `Imported ${r.references.length} reference(s). Notes: ${r.warnings.slice(0, 4).join("; ")}`
-                        : `Imported ${r.references.length} reference(s) from manuscript.`,
-                    );
-                  });
-                }}
-              >
-                {refsImportBusy ? "Importing…" : "Import from manuscript"}
-              </Button>
-            ) : null}
-            <input
-              ref={refsFileInputRef}
-              type="file"
-              accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              className="sr-only"
-              aria-label="Upload Word document to extract references"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                e.target.value = "";
-                if (!file) return;
-                if (
-                  !confirm(
-                    'Replace all reference rows with entries scraped from the "References" section of this .docx file?\n\n' +
-                      "The file is not stored — only the extracted list is applied.",
-                  )
-                ) {
-                  return;
-                }
-                setRefsImportNote(null);
-                setRefsImportBusy(true);
-                const fd = new FormData();
-                fd.append("articleId", props.articleId);
-                fd.append("file", file);
-                void fetch("/api/articles/import-references-upload", {
-                  method: "POST",
-                  body: fd,
-                  credentials: "same-origin",
-                })
-                  .then(async (res) => {
-                    const j = (await res.json()) as
-                      | { ok: true; references: ArticleReferenceRow[]; warnings: string[] }
-                      | { ok: false; message: string };
-                    setRefsImportBusy(false);
-                    if (!res.ok || !j || typeof j !== "object" || !("ok" in j) || !j.ok) {
-                      setRefsImportNote(
-                        !j || typeof j !== "object" || !("message" in j)
-                          ? `Upload failed (${res.status}).`
-                          : String((j as { message?: string }).message ?? "Upload failed."),
-                      );
-                      return;
-                    }
-                    setReferences(j.references.length ? j.references : [{ text: "" }]);
-                    setRefsImportNote(
-                      j.warnings.length
-                        ? `Imported ${j.references.length} reference(s). Notes: ${j.warnings.slice(0, 4).join("; ")}`
-                        : `Imported ${j.references.length} reference(s) from file.`,
-                    );
-                  })
-                  .catch(() => {
-                    setRefsImportBusy(false);
-                    setRefsImportNote("Upload failed.");
-                  });
-              }}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={refsImportBusy || pending}
-              onClick={() => refsFileInputRef.current?.click()}
-            >
-              Upload .docx
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => setReferences((r) => [...r, { text: "" }])}>
-              Add reference
-            </Button>
-          </div>
-        </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Numbered list order matches in-text citations <code>[1]</code>, <code>[2]</code>, … Use{" "}
-          <strong>Import from manuscript</strong> or <strong>Upload .docx</strong> to pull the list under a Word heading
-          or a standalone line titled <code>References</code> (bold body text works). Bulleted or numbered lists (
-          <code>[1]</code>, <code>1.</code>) and multi-line entries are split automatically. Detected DOIs are saved; the
-          public article links DOI, Crossref search, and Google Scholar for each entry.
-        </p>
-        {refsImportBusy ? (
-          <div
-            role="status"
-            aria-live="polite"
-            className="mt-3 rounded-lg border border-teal-200 bg-teal-50/60 px-3 py-2"
-          >
-            <div className="flex items-center gap-2 text-sm">
-              <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden />
-              <span>
-                {refsImportProgressMessage || "Working…"}{" "}
-                <span className="tabular-nums text-muted-foreground">({refsImportProgressPercent}%)</span>
-              </span>
-            </div>
-          </div>
-        ) : null}
-        {refsImportNote ? <p className="mt-2 text-sm text-muted-foreground">{refsImportNote}</p> : null}
-        <ul className="mt-4 space-y-4">
-          {references.map((row, i) => (
-            <li key={i} className="rounded-md border p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-muted-foreground">Reference {i + 1}</span>
-                <div className="flex flex-wrap gap-2">
-                  <CopyTextButton label="Copy line" text={row.text} />
-                  {references.length > 1 ? (
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setReferences((r) => r.filter((_, j) => j !== i))}>
-                      Remove
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-              <Textarea
-                rows={3}
-                placeholder="Full reference text (paste from manuscript)"
-                value={row.text}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setReferences((prev) => prev.map((x, j) => (j === i ? { ...x, text: v } : x)));
-                }}
-              />
-              <div className="mt-2 grid gap-2 md:grid-cols-2">
-                <div className="grid gap-1">
-                  <Label className="text-xs">DOI (optional)</Label>
-                  <Input
-                    placeholder="10.xxxx/xxxx"
-                    value={row.doi ?? ""}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setReferences((prev) => prev.map((x, j) => (j === i ? { ...x, doi: v } : x)));
-                    }}
-                  />
-                </div>
-                <div className="grid gap-1">
-                  <Label className="text-xs">Google Scholar URL (optional)</Label>
-                  <Input
-                    placeholder="https://scholar.google.com/..."
-                    value={row.google_scholar_url ?? ""}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setReferences((prev) =>
-                        prev.map((x, j) => (j === i ? { ...x, google_scholar_url: v } : x)),
-                      );
-                    }}
-                  />
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="rounded-lg border bg-white p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">Article body (Markdown)</h2>
+          <h2 className="text-lg font-semibold">Article body (JATS XML)</h2>
           <div className="flex flex-wrap items-center gap-2">
             {props.submissionId ? (
               <Button
@@ -709,9 +377,9 @@ export function ArticleEditorForm(props: {
                 onClick={() => {
                   if (
                     !confirm(
-                      "Replace the entire article body with text converted from the latest submission manuscript (.docx)?\n\n" +
+                      "Replace the entire article XML body with JATS converted from the latest submission manuscript (.docx)?\n\n" +
                         "• Figures and tables become shortcodes such as {{figure:fig-1}} and {{table:tbl-1}} — add matching assets in “Figures and Tables” below.\n" +
-                        "• Superscript and subscript from Word are kept using <sup> and <sub> tags in the Markdown.",
+                        "• Superscript and subscript from Word are kept using <sup> and <sub> tags.",
                     )
                   ) {
                     return;
@@ -731,7 +399,7 @@ export function ArticleEditorForm(props: {
                       setImportNote(r.message);
                       return;
                     }
-                    setMarkdownBody(r.markdown);
+                    setJatsXmlBody(r.jatsXml);
                     setImportNote(
                       r.warnings.length
                         ? `Imported. Notes: ${r.warnings.slice(0, 4).join("; ")}`
@@ -743,12 +411,12 @@ export function ArticleEditorForm(props: {
                 {importBusy ? "Importing…" : "Import from manuscript"}
               </Button>
             ) : null}
-            <CopyTextButton label="Copy body" text={markdownBody} />
+            <CopyTextButton label="Copy XML" text={jatsXmlBody} />
           </div>
         </div>
         {props.submissionId ? (
           <p className="mt-2 text-sm text-muted-foreground">
-            <strong>Import from manuscript</strong> reads the latest submission .docx and fills this field. Figures and tables become{" "}
+            <strong>Import from manuscript</strong> reads the latest submission .docx and fills this field with JATS XML. Figures and tables become{" "}
             <code className="rounded bg-muted px-1">{"{{figure:fig-1}}"}</code> / <code className="rounded bg-muted px-1">{"{{table:tbl-1}}"}</code> placeholders — add matching keys under Figures and Tables. Word superscript/subscript are kept as{" "}
             <code className="rounded bg-muted px-1">&lt;sup&gt;</code> / <code className="rounded bg-muted px-1">&lt;sub&gt;</code> in the text.
           </p>
@@ -790,7 +458,7 @@ export function ArticleEditorForm(props: {
             </div>
           </div>
         ) : null}
-        <Textarea className="mt-3 font-mono text-sm" rows={18} value={markdownBody} onChange={(e) => setMarkdownBody(e.target.value)} />
+        <Textarea className="mt-3 font-mono text-sm" rows={18} value={jatsXmlBody} onChange={(e) => setJatsXmlBody(e.target.value)} />
         <div className="mt-3">
           <Button disabled={pending} onClick={save}>
             {pending ? "Saving..." : "Save draft"}
@@ -814,9 +482,8 @@ export function ArticleEditorForm(props: {
         <div className="mt-3 rounded border p-4">
           <ArticlePreview
             abstractMarkdown={abstractText}
-            markdownBody={markdownBody}
+            markdownBody={jatsXmlToMarkdown(jatsXmlBody)}
             assets={props.assets}
-            references={refsForPreview}
           />
         </div>
       </section>

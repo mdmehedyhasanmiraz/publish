@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { assertTransition } from "@/lib/workflows/submission-machine";
+import { extractSubmissionManuscriptMetadata } from "@/lib/submissions/extract-submission-manuscript-metadata";
 import type { WizardAuthorRow } from "@/lib/submissions/wizard-author-types";
 
 export type SubmitSubmissionForReviewResult = { ok: true; message?: string } | { ok: false; message: string };
@@ -35,6 +36,18 @@ export async function submitSubmissionForReview(
     }
   } else {
     return { ok: false, message: "Add author information in step 3 before submitting." };
+  }
+
+  const metadata = await extractSubmissionManuscriptMetadata(supabase, userId, submissionId);
+  if (!metadata.ok) {
+    return { ok: false, message: metadata.message };
+  }
+  if (!metadata.skipped && Array.isArray(metadata.authors) && metadata.authors.length > 0) {
+    return {
+      ok: false,
+      message:
+        "Double-blind policy violation: author names were detected in the manuscript. Upload a blinded manuscript before submitting.",
+    };
   }
 
   const { error: upErr } = await supabase.from("submissions").update({ status: "submitted" }).eq("id", submissionId);

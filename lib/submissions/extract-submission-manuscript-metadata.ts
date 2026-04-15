@@ -5,6 +5,7 @@ export type ExtractManuscriptMetadataResult =
       ok: true;
       title?: string;
       abstract?: string;
+      authors?: Array<{ display_name: string; first_name: string; last_name: string }>;
       skipped?: boolean;
       reason?: "no_file" | "unsupported_format" | "empty";
       message?: string;
@@ -79,6 +80,7 @@ export async function extractSubmissionManuscriptMetadata(
   const buf = await blob.arrayBuffer();
   const { extractPlainTextFromDocxBuffer } = await import("@/lib/manuscript/extract-docx-text");
   const { parseTitleAndAbstractFromPlainText } = await import("@/lib/manuscript/parse-title-abstract");
+  const { parseAuthorNamesFromPlainText } = await import("@/lib/manuscript/parse-authors-from-plain-text");
 
   let plain: string;
   try {
@@ -98,14 +100,15 @@ export async function extractSubmissionManuscriptMetadata(
   }
 
   const { title, abstract } = parseTitleAndAbstractFromPlainText(plain);
-  if (!title.trim() && !abstract.trim()) {
+  const authors = parseAuthorNamesFromPlainText(plain);
+  if (!title.trim() && !abstract.trim() && !authors.length) {
     return {
       ok: true,
       skipped: true,
       reason: "empty",
-      message: "Could not detect a title or abstract. Edit the fields manually.",
+      message: "Could not detect title, abstract, or author names. Edit fields manually.",
     };
   }
 
-  return { ok: true, title, abstract };
+  return { ok: true, title, abstract, authors };
 }

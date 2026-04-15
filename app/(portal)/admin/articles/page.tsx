@@ -36,15 +36,15 @@ export default async function AdminArticlesPage() {
     <div>
       <h2 className="text-xl font-semibold">Articles</h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        Accepted manuscripts appear here for Markdown production. Create drafts from accepted submissions or open an
-        existing article to edit the publishable Markdown body.
+        Accepted manuscripts appear here for JATS XML production. Create drafts from accepted submissions or open an
+        existing article to edit the publishable XML body.
       </p>
 
       {acceptedWithoutArticle.length ? (
         <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50/80 p-4">
           <h3 className="text-sm font-semibold text-amber-950">Accepted — article draft not created yet</h3>
           <p className="mt-1 text-sm text-amber-950/90">
-            These manuscripts are accepted but do not have an article row yet. Create a draft to edit Markdown and
+            These manuscripts are accepted but do not have an article row yet. Create a draft to edit JATS XML and
             figures for publication.
           </p>
           <ul className="mt-3 grid gap-3">
@@ -79,9 +79,9 @@ export default async function AdminArticlesPage() {
 
       {fromSubmissionArticles.length ? (
         <div className="mt-5 rounded border bg-white p-4">
-          <h3 className="text-sm font-semibold">From accepted submissions (Markdown production)</h3>
+          <h3 className="text-sm font-semibold">From accepted submissions (JATS XML production)</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Article drafts linked to a manuscript. Edit the Markdown body, references, and assets before publishing.
+            Article drafts linked to a manuscript. Edit the JATS XML body, references, and assets before publishing.
           </p>
           <div className="mt-3 grid gap-2">
             {fromSubmissionArticles.map((a) => {

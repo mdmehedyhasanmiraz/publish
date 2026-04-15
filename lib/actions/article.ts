@@ -2,8 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import type { ArticleExtraMetadata, ArticleReferenceRow } from "@/lib/articles/extra-metadata";
-import { parseArticleExtraMetadata } from "@/lib/articles/extra-metadata";
 import { mergeWorkspaceRoles } from "@/lib/auth/app-roles";
 import { isPlatformAdminRole } from "@/lib/peer-review/workflow-access";
 import { slugify } from "@/lib/utils";
@@ -114,13 +112,10 @@ export async function ensureArticleForSubmissionAction(submissionId: string) {
       version_number: 1,
       title,
       abstract,
-      markdown_body:
-        "## Main text\n\nWrite the article in Markdown. Use [1], [2] for citations and list full references in the metadata fields.\n",
       jats_xml: markdownToJatsXml({
         title,
         abstract,
-        markdownBody:
-          "## Main text\n\nWrite the article in Markdown. Use [1], [2] for citations and list full references in the metadata fields.\n",
+        markdownBody: "## Main text\n\nWrite the article body in JATS XML.\n",
       }),
       workflow_status: "draft",
       created_by: userId,
@@ -157,7 +152,7 @@ export async function ensureArticleHasEditVersionAction(articleId: string): Prom
 }
 
 /**
- * Converts the submission’s latest manuscript .docx into Markdown for the article body
+ * Converts the submission’s latest manuscript .docx into JATS XML for the article body
  * (figures/tables as {{figure:fig-n}} / {{table:tbl-n}} placeholders; superscript/subscript kept as &lt;sup&gt;/&lt;sub&gt;).
  * For live progress in the UI, use POST `/api/articles/import-manuscript-body` (NDJSON stream).
  */
@@ -227,7 +222,6 @@ export async function createArticleDraftAction(input: {
       version_number: versionNumber,
       title,
       abstract: null,
-      markdown_body: "",
       jats_xml: markdownToJatsXml({ title, abstract: null, markdownBody: "" }),
       workflow_status: "draft",
       created_by: userId,
@@ -256,11 +250,8 @@ export async function saveArticleVersionAction(input: {
   abstract: string;
   doi: string;
   keywordsCsv: string;
-  markdownBody: string;
+  jatsXmlBody: string;
   issueId?: string | null;
-  acknowledgement?: string;
-  competingInterests?: string;
-  references?: ArticleReferenceRow[];
 }) {
   const auth = await requireEditorAccess();
   if (!auth.ok) return auth;
@@ -273,33 +264,12 @@ export async function saveArticleVersionAction(input: {
     .map((k) => k.trim())
     .filter(Boolean);
 
-  const { data: verRow } = await supabase
-    .from("article_versions")
-    .select("extra_metadata")
-    .eq("id", input.versionId)
-    .eq("article_id", input.articleId)
-    .maybeSingle();
-  const prevMeta = parseArticleExtraMetadata(verRow?.extra_metadata);
-  const extraMeta: ArticleExtraMetadata = {
-    acknowledgement:
-      input.acknowledgement !== undefined ? input.acknowledgement.trim() || undefined : prevMeta.acknowledgement,
-    competing_interests:
-      input.competingInterests !== undefined ? input.competingInterests.trim() || undefined : prevMeta.competing_interests,
-    references: input.references !== undefined ? input.references : prevMeta.references,
-  };
-
   const { error: vErr } = await supabase
     .from("article_versions")
     .update({
       title,
       abstract: input.abstract.trim() || null,
-      markdown_body: input.markdownBody,
-      jats_xml: markdownToJatsXml({
-        title,
-        abstract: input.abstract.trim() || null,
-        markdownBody: input.markdownBody,
-      }),
-      extra_metadata: extraMeta,
+      jats_xml: input.jatsXmlBody.trim(),
     })
     .eq("id", input.versionId)
     .eq("article_id", input.articleId);

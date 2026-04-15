@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ArticlePreview } from "@/components/articles/article-preview";
-import { ArticleReferencesSection } from "@/components/articles/article-references-section";
 import { ArticlePublicSidebar } from "@/components/public/article-public-sidebar";
 import { ArticlePublicByline } from "@/components/public/article-public-byline";
 import { ArticlePublicationTimeline } from "@/components/public/article-publication-timeline";
@@ -13,7 +12,6 @@ import type { PublicArticleAuthorRow } from "@/lib/articles/public-article-autho
 import { publicCoverUrl } from "@/lib/storage/covers";
 import type { ArticleTocItem } from "@/lib/articles/markdown";
 import { renderArticleMarkdownToHtmlWithToc } from "@/lib/articles/markdown";
-import { parseArticleExtraMetadata } from "@/lib/articles/extra-metadata";
 import { buildCitationWork } from "@/lib/articles/citation-formats";
 import { getPublicSiteUrl } from "@/lib/site-url";
 import { ArticleCiteButton } from "@/components/public/article-cite-button";
@@ -76,13 +74,11 @@ export default async function ArticlePage({ params }: Props) {
 
   const { data: version } = await supabase
     .from("article_versions")
-    .select("id, title, abstract, markdown_body, jats_xml, workflow_status, extra_metadata")
+    .select("id, title, abstract, jats_xml, workflow_status")
     .eq("id", article.current_version_id as string)
     .eq("workflow_status", "published")
     .maybeSingle();
   if (!version) notFound();
-
-  const extra = parseArticleExtraMetadata(version.extra_metadata);
 
   const [{ data: assets }, { data: submission }] = await Promise.all([
     supabase
@@ -101,21 +97,16 @@ export default async function ArticlePage({ params }: Props) {
     : [];
   const coverSrc = publicCoverUrl(journal.cover_image_path ?? null);
 
-  const mdBodyFromJats =
+  const mdBody =
     typeof (version as { jats_xml?: unknown }).jats_xml === "string" && String((version as { jats_xml: string }).jats_xml).trim()
       ? jatsXmlToMarkdown(String((version as { jats_xml: string }).jats_xml))
       : "";
-  const mdBody = mdBodyFromJats || ((version.markdown_body as string) ?? "");
+  const hasAbstractHeadingInBody = /(^|\n)#{1,3}\s*abstract\b/i.test(mdBody);
 
   const { html: bodyHtml, toc: bodyToc } = renderArticleMarkdownToHtmlWithToc(mdBody, (assets ?? []) as never);
 
-  /** Sidebar outline: ## headings from the body, plus References when present. */
-  const tocItems: ArticleTocItem[] = [
-    ...bodyToc.filter((item) => item.level === 2),
-    ...(extra.references && extra.references.length > 0
-      ? ([{ level: 2, id: "references", text: "References" }] satisfies ArticleTocItem[])
-      : []),
-  ];
+  /** Sidebar outline from article body headings (`##` + `###`). */
+  const tocItems: ArticleTocItem[] = [...bodyToc];
 
   const doiDisplay = (article.doi as string | null)?.trim() || null;
   const doiLink =
@@ -205,39 +196,14 @@ export default async function ArticlePage({ params }: Props) {
         <div className="min-w-0 space-y-6">
           <section className="rounded-lg border bg-white p-6">
             <ArticlePreview
-              abstractMarkdown={
-                ((version.abstract as string | null) ?? (article.abstract as string | null) ?? "") as string
-              }
-              markdownBody={(version.markdown_body as string) ?? ""}
+              abstractMarkdown={hasAbstractHeadingInBody ? "" : (((version.abstract as string | null) ?? (article.abstract as string | null) ?? "") as string)}
+              markdownBody={mdBody}
               bodyHtml={bodyHtml}
               assets={(assets ?? []) as never}
               paragraphFont="stix-two-text"
             />
           </section>
 
-          {extra.references && extra.references.length > 0 ? (
-            <section className="rounded-lg border bg-white p-6">
-              <ArticleReferencesSection
-                references={extra.references}
-                paragraphFont="stix-two-text"
-                className="border-0 pt-0"
-              />
-            </section>
-          ) : null}
-
-          {extra.acknowledgement?.trim() ? (
-            <section className="rounded-lg border bg-white p-4">
-              <h2 className="text-lg font-semibold">Acknowledgements</h2>
-              <p className="mt-2 whitespace-pre-wrap text-sm">{extra.acknowledgement}</p>
-            </section>
-          ) : null}
-
-          {extra.competing_interests?.trim() ? (
-            <section className="rounded-lg border bg-white p-4">
-              <h2 className="text-lg font-semibold">Competing interests</h2>
-              <p className="mt-2 whitespace-pre-wrap text-sm">{extra.competing_interests}</p>
-            </section>
-          ) : null}
         </div>
 
         <ArticlePublicSidebar tocItems={tocItems} manuscriptReferenceCode={refCode || null} />

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -66,10 +67,19 @@ type AuthorRow = {
   is_corresponding_author: boolean;
 };
 type UploadedRow = { id: string; kind: string; description: string; path: string; mime: string | null };
+type ExtractedAuthorName = { display_name?: string; first_name?: string; last_name?: string };
+type ExtractedAuthorDetails = {
+  display_name?: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  affiliations?: string[];
+};
 
 const fileKinds = [
   { value: "manuscript", label: "Manuscript" },
   { value: "blinded_manuscript", label: "Blinded manuscript" },
+  { value: "author_details", label: "Author details (template)" },
   { value: "cover_letter", label: "Cover letter" },
   { value: "figure", label: "Figure" },
   { value: "table", label: "Table" },
@@ -78,6 +88,8 @@ const fileKinds = [
 const steps = ["Journal, area and type", "Files upload", "Author affiliations", "Other details", "Review & submit"];
 
 const MAX_CORRESPONDING_AUTHORS = 3;
+const AUTHOR_TEMPLATE_URL =
+  "https://hvmkfqqytzkltzkxfdxv.supabase.co/storage/v1/object/sign/data/sample/Author_affiliations.docx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV80YjAzODI2Mi01MjFjLTQyNjEtYTNhNi0zMDM1Yzc5YTg5NTUiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJkYXRhL3NhbXBsZS9BdXRob3JfYWZmaWxpYXRpb25zLmRvY3giLCJpYXQiOjE3NzYxOTEyMzcsImV4cCI6MjA5MTU1MTIzN30.IZZd8t9vM6yC4s3G9zif1__348grAPNYpu4dy3niwo8";
 
 const emptyAffiliation = (): AuthorAffiliation => ({
   institution_name: "",
@@ -116,6 +128,36 @@ const emptyAuthor = (): AuthorRow => ({
   account_status: "pending_signup",
   is_corresponding_author: false,
 });
+
+function mergeAuthorsFromDetails(prev: AuthorRow[], extracted: ExtractedAuthorDetails[]): AuthorRow[] {
+  if (!extracted.length) return prev;
+  const merged = extracted.map((raw, idx) => {
+    const existing = prev[idx];
+    const row = existing ? { ...existing } : emptyAuthor();
+    const first = String(raw.first_name ?? "").trim();
+    const last = String(raw.last_name ?? "").trim();
+    const display = String(raw.display_name ?? "").trim();
+    const email = String(raw.email ?? "").trim();
+    const affiliations = Array.isArray(raw.affiliations)
+      ? raw.affiliations.map((name, affIdx) => ({
+          ...emptyAffiliation(),
+          institution_name: String(name ?? "").trim(),
+          is_primary: affIdx === 0,
+        }))
+      : [];
+    return {
+      ...row,
+      first_name: first || row.first_name,
+      last_name: last || row.last_name,
+      display_name: display || row.display_name,
+      email: email || row.email,
+      affiliations: affiliations.length ? affiliations : row.affiliations || [emptyAffiliation()],
+      is_corresponding_author: existing ? row.is_corresponding_author : idx === 0,
+    };
+  });
+  if (prev.length > extracted.length) merged.push(...prev.slice(extracted.length));
+  return merged;
+}
 
 function normalizeAuthorsFromStorage(rows: AuthorRow[]): AuthorRow[] {
   const withFlags = rows.map((a) => ({
@@ -166,6 +208,8 @@ export function SubmissionWizardForm({
   const [pending, startTransition] = useTransition();
   const [filePending, startFileTransition] = useTransition();
   const [message, setMessage] = useState("");
+  const [policyWarningOpen, setPolicyWarningOpen] = useState(false);
+  const [policyWarningText, setPolicyWarningText] = useState("");
   const [step, setStep] = useState(1);
   const [journalId, setJournalId] = useState(initialSubmission?.journal_id ?? journals[0]?.id ?? "");
   const [area, setArea] = useState(initialSubmission?.area ?? "");
@@ -233,7 +277,7 @@ export function SubmissionWizardForm({
       },
     ];
   });
-  const [editingAuthorIdx, setEditingAuthorIdx] = useState(0);
+  const [editingAuthorIdx, setEditingAuthorIdx] = useState<number>(-1);
 
   const selectedJournal = journals.find((j) => j.id === journalId);
   const areaOptions = selectedJournal?.submission_areas?.length ? selectedJournal.submission_areas : ["General"];
@@ -300,6 +344,11 @@ export function SubmissionWizardForm({
       return;
     }
     if (!res.ok) {
+      const msg = String(res.message ?? "Could not save.");
+      if (/double-blind policy violation/i.test(msg)) {
+        setPolicyWarningText(msg);
+        setPolicyWarningOpen(true);
+      }
       setMessage(res.message ?? "Could not save.");
       return;
     }
@@ -311,6 +360,9 @@ export function SubmissionWizardForm({
   async function uploadCurrentFile() {
     if (!submissionId || !submissionVersionId) return setMessage("Create a draft first.");
     if (!pickedFile) return setMessage("Pick a file first.");
+    if (fileKind === "author_details" && !/\.(docx?|DOCX?)$/.test(pickedFile.name)) {
+      return setMessage("Author details file must be .doc or .docx.");
+    }
     const safeName = pickedFile.name.replaceAll(/[^a-zA-Z0-9._-]+/g, "-");
     const objectPath = `submissions/${submissionId}/${submissionVersionId}/${crypto.randomUUID()}-${safeName}`;
     const { error: upErr } = await supabase.storage.from("data").upload(objectPath, pickedFile, {
@@ -545,10 +597,51 @@ export function SubmissionWizardForm({
   }
 
   const lastExtractedManuscriptKeyRef = useRef<string | null>(null);
+  const lastExtractedAuthorsKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     lastExtractedManuscriptKeyRef.current = null;
+    lastExtractedAuthorsKeyRef.current = null;
   }, [submissionId]);
+
+  useEffect(() => {
+    if (step !== 3 || !submissionId) return;
+    const authorDetailsRow = uploadedFiles.find((f) => f.kind === "author_details");
+    const key = authorDetailsRow ? `${submissionId}:${authorDetailsRow.path}` : `${submissionId}:no-author-details`;
+    if (lastExtractedAuthorsKeyRef.current === key) return;
+    lastExtractedAuthorsKeyRef.current = key;
+
+    let cancelled = false;
+    void (async () => {
+      let res: {
+        ok: boolean;
+        skipped?: boolean;
+        authors?: ExtractedAuthorDetails[];
+        message?: string;
+      };
+      try {
+        const fetchRes = await fetch("/api/author/submissions/wizard/extract-author-details", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ submissionId }),
+        });
+        res = (await fetchRes.json()) as typeof res;
+      } catch {
+        return;
+      }
+      if (cancelled || !res?.ok) return;
+      if (res.skipped || !Array.isArray(res.authors) || !res.authors.length) {
+        if (res.message) setMessage(res.message);
+        return;
+      }
+      setAuthors((prev) => mergeAuthorsFromDetails(prev, res.authors ?? []));
+      setMessage("Authors were loaded from your author details file. Review and edit before continuing.");
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [step, submissionId, uploadedFiles]);
 
   useEffect(() => {
     if (step !== 4 || !submissionId) return;
@@ -569,6 +662,7 @@ export function SubmissionWizardForm({
         skipped?: boolean;
         title?: string;
         abstract?: string;
+        authors?: ExtractedAuthorName[];
         message?: string;
       };
       try {
@@ -779,9 +873,32 @@ export function SubmissionWizardForm({
       )}
       {step === 2 && (
         <section className="rounded-lg border bg-white p-5">
+          <Dialog open={policyWarningOpen} onOpenChange={setPolicyWarningOpen}>
+            <DialogContent className="max-w-xl">
+              <DialogHeader>
+                <DialogTitle>Double-blind policy violation</DialogTitle>
+                <DialogDescription>
+                  {policyWarningText || "Author-identifying details were detected in the manuscript."}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex justify-end">
+                <Button type="button" onClick={() => setPolicyWarningOpen(false)}>
+                  OK
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
           <h2 className="text-lg font-semibold">Step 2: Upload files</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Upload each file with the button below. Your progress is saved when you continue.
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Double-blind policy: manuscripts must not contain author names. Upload author information separately as an{" "}
+            <span className="font-medium">Author details</span> file using the template{" "}
+            <a href={AUTHOR_TEMPLATE_URL} className="text-primary underline underline-offset-4" target="_blank" rel="noreferrer">
+              Download DOCX template
+            </a>
+            .
           </p>
           <div
             className="mt-4 rounded-md border-2 border-dashed p-6 text-center"
@@ -793,7 +910,12 @@ export function SubmissionWizardForm({
             }}
           >
             <p className="text-sm text-muted-foreground">Drag and drop a file here, or choose manually.</p>
-            <Input className="mt-3" type="file" onChange={(e) => setPickedFile(e.target.files?.[0] ?? null)} />
+            <Input
+              className="mt-3"
+              type="file"
+              accept={fileKind === "author_details" ? ".doc,.docx" : undefined}
+              onChange={(e) => setPickedFile(e.target.files?.[0] ?? null)}
+            />
           </div>
           <div className="mt-4 grid gap-4 md:grid-cols-3">
             <div className="grid gap-2">
@@ -916,7 +1038,11 @@ export function SubmissionWizardForm({
                         variant="outline"
                         onClick={() => {
                           setAuthors((prev) => prev.filter((_, i) => i !== idx));
-                          setEditingAuthorIdx((prev) => (prev >= idx ? Math.max(0, prev - 1) : prev));
+                          setEditingAuthorIdx((prev) => {
+                            if (prev === idx) return -1;
+                            if (prev > idx) return prev - 1;
+                            return prev;
+                          });
                         }}
                       >
                         Remove
@@ -927,18 +1053,65 @@ export function SubmissionWizardForm({
               </div>
             ))}
           </div>
-          {authors[editingAuthorIdx] ? <div className="mt-5 rounded-md border bg-muted/20 p-4"><h3 className="text-sm font-semibold">Edit author details</h3>
-          <div className="mt-3 flex items-center gap-2">
-            <Checkbox
-              id={`author-corresponding-${editingAuthorIdx}`}
-              checked={authors[editingAuthorIdx].is_corresponding_author}
-              onCheckedChange={(v) => toggleCorrespondingAuthor(editingAuthorIdx, v === true)}
-            />
-            <Label htmlFor={`author-corresponding-${editingAuthorIdx}`} className="cursor-pointer text-sm font-normal">
-              Corresponding author (max {MAX_CORRESPONDING_AUTHORS})
-            </Label>
-          </div>
-          <div className="mt-3 grid gap-3 md:grid-cols-4"><Input placeholder="Salutation" value={authors[editingAuthorIdx].salutation} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, salutation: e.target.value } : a))} /><Input placeholder="First name" value={authors[editingAuthorIdx].first_name} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, first_name: e.target.value } : a))} /><Input placeholder="Middle name" value={authors[editingAuthorIdx].middle_name} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, middle_name: e.target.value } : a))} /><Input placeholder="Last name" value={authors[editingAuthorIdx].last_name} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, last_name: e.target.value } : a))} /><Input placeholder="Email" value={authors[editingAuthorIdx].email} onBlur={() => startTransition(async () => autofillAuthorFromEmail(editingAuthorIdx))} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, email: e.target.value } : a))} /><Input placeholder="Alternate email" value={authors[editingAuthorIdx].alternate_email} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, alternate_email: e.target.value } : a))} /><Input placeholder="Phone" value={authors[editingAuthorIdx].phone} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, phone: e.target.value } : a))} /><Input placeholder="ORCID ID" value={authors[editingAuthorIdx].orcid_id} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, orcid_id: e.target.value } : a))} /></div><div className="mt-3 grid gap-3 md:grid-cols-3"><Input placeholder="Address line 1" value={authors[editingAuthorIdx].address_line1} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, address_line1: e.target.value } : a))} /><Input placeholder="City" value={authors[editingAuthorIdx].city} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, city: e.target.value } : a))} /><Input placeholder="Country code" value={authors[editingAuthorIdx].country_code} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, country_code: e.target.value } : a))} /></div><div className="mt-4 rounded border bg-white p-3"><div className="flex items-center justify-between"><h4 className="text-sm font-semibold">Affiliations</h4><Button size="sm" variant="outline" onClick={() => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, affiliations: [...a.affiliations, emptyAffiliation()] } : a))}>Add affiliation</Button></div><div className="mt-3 grid gap-3">{authors[editingAuthorIdx].affiliations.map((af, affIdx) => <div key={`${editingAuthorIdx}-${affIdx}`} className="rounded border p-3"><div className="grid gap-2 md:grid-cols-3"><Input placeholder="Institution / Org" value={af.institution_name} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, affiliations: a.affiliations.map((x, j) => j === affIdx ? { ...x, institution_name: e.target.value } : x) } : a))} /><Input placeholder="Department" value={af.department} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, affiliations: a.affiliations.map((x, j) => j === affIdx ? { ...x, department: e.target.value } : x) } : a))} /><Input placeholder="Position title" value={af.position_title} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, affiliations: a.affiliations.map((x, j) => j === affIdx ? { ...x, position_title: e.target.value } : x) } : a))} /></div>{authors[editingAuthorIdx].affiliations.length > 1 ? <div className="mt-2 flex justify-end"><Button size="sm" variant="outline" onClick={() => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, affiliations: a.affiliations.filter((_, j) => j !== affIdx) } : a))}>Remove affiliation</Button></div> : null}</div>)}</div></div></div> : null}
+          <Dialog open={editingAuthorIdx >= 0} onOpenChange={(open) => setEditingAuthorIdx(open ? editingAuthorIdx : -1)}>
+            <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Edit author details</DialogTitle>
+                <DialogDescription>Update the selected author details and affiliations.</DialogDescription>
+              </DialogHeader>
+              {authors[editingAuthorIdx] ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id={`author-corresponding-${editingAuthorIdx}`}
+                      checked={authors[editingAuthorIdx].is_corresponding_author}
+                      onCheckedChange={(v) => toggleCorrespondingAuthor(editingAuthorIdx, v === true)}
+                    />
+                    <Label htmlFor={`author-corresponding-${editingAuthorIdx}`} className="cursor-pointer text-sm font-normal">
+                      Corresponding author (max {MAX_CORRESPONDING_AUTHORS})
+                    </Label>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <Input placeholder="Salutation" value={authors[editingAuthorIdx].salutation} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, salutation: e.target.value } : a))} />
+                    <Input placeholder="First name" value={authors[editingAuthorIdx].first_name} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, first_name: e.target.value } : a))} />
+                    <Input placeholder="Middle name" value={authors[editingAuthorIdx].middle_name} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, middle_name: e.target.value } : a))} />
+                    <Input placeholder="Last name" value={authors[editingAuthorIdx].last_name} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, last_name: e.target.value } : a))} />
+                    <Input placeholder="Email" value={authors[editingAuthorIdx].email} onBlur={() => startTransition(async () => autofillAuthorFromEmail(editingAuthorIdx))} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, email: e.target.value } : a))} />
+                    <Input placeholder="Alternate email" value={authors[editingAuthorIdx].alternate_email} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, alternate_email: e.target.value } : a))} />
+                    <Input placeholder="Phone" value={authors[editingAuthorIdx].phone} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, phone: e.target.value } : a))} />
+                    <Input placeholder="ORCID ID" value={authors[editingAuthorIdx].orcid_id} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, orcid_id: e.target.value } : a))} />
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <Input placeholder="Address line 1" value={authors[editingAuthorIdx].address_line1} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, address_line1: e.target.value } : a))} />
+                    <Input placeholder="City" value={authors[editingAuthorIdx].city} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, city: e.target.value } : a))} />
+                    <Input placeholder="Country code" value={authors[editingAuthorIdx].country_code} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, country_code: e.target.value } : a))} />
+                  </div>
+                  <div className="rounded border bg-white p-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-semibold">Affiliations</h4>
+                      <Button size="sm" variant="outline" onClick={() => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, affiliations: [...a.affiliations, emptyAffiliation()] } : a))}>Add affiliation</Button>
+                    </div>
+                    <div className="mt-3 grid gap-3">
+                      {authors[editingAuthorIdx].affiliations.map((af, affIdx) => (
+                        <div key={`${editingAuthorIdx}-${affIdx}`} className="rounded border p-3">
+                          <div className="grid gap-2 md:grid-cols-3">
+                            <Input placeholder="Institution / Org" value={af.institution_name} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, affiliations: a.affiliations.map((x, j) => j === affIdx ? { ...x, institution_name: e.target.value } : x) } : a))} />
+                            <Input placeholder="Department" value={af.department} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, affiliations: a.affiliations.map((x, j) => j === affIdx ? { ...x, department: e.target.value } : x) } : a))} />
+                            <Input placeholder="Position title" value={af.position_title} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, affiliations: a.affiliations.map((x, j) => j === affIdx ? { ...x, position_title: e.target.value } : x) } : a))} />
+                          </div>
+                          {authors[editingAuthorIdx].affiliations.length > 1 ? (
+                            <div className="mt-2 flex justify-end">
+                              <Button size="sm" variant="outline" onClick={() => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, affiliations: a.affiliations.filter((_, j) => j !== affIdx) } : a))}>Remove affiliation</Button>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </DialogContent>
+          </Dialog>
           <div className="mt-3 flex gap-2">
             <Button disabled={pending || !submissionId} onClick={() => startTransition(saveAuthorsStep3)}>
               {pending ? "Saving..." : "Save and continue"}
