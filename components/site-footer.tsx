@@ -20,7 +20,7 @@ export function SiteFooter() {
           {/* —— Row 1 —— */}
           <div className="min-w-0 sm:col-span-2 lg:col-span-2 xl:col-span-2">
             <Link href="/" className="inline-block">
-              <Image
+              <img
                 src="/logos/logo-sciencelet-w.svg"
                 alt="Sciencelet"
                 width={120}

@@ -44,6 +44,7 @@ export function JournalCoverImage(props: {
         fill
         className="object-cover"
         sizes={props.sizes ?? "240px"}
+        suppressHydrationWarning
       />
     </div>
   );

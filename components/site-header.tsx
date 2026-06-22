@@ -281,7 +281,7 @@ export function SiteHeader() {
                 href="/"
                 className="mr-1 max-w-[180px] shrink-0 overflow-hidden whitespace-nowrap font-bold tracking-tight"
               >
-                <Image
+                <img
                   src="/logos/logo-sciencelet-w.svg"
                   alt="Sciencelet"
                   width={108}
@@ -300,7 +300,7 @@ export function SiteHeader() {
                 href="/"
                 className="mr-1 max-w-[180px] shrink-0 overflow-hidden whitespace-nowrap font-bold tracking-tight"
               >
-                <Image
+                <img
                   src="/logos/logo-sciencelet-w.svg"
                   alt="Sciencelet"
                   width={108}
@@ -389,7 +389,7 @@ export function SiteHeader() {
               aria-hidden
               tabIndex={-1}
             >
-              <Image
+              <img
                 src="/logos/logo-sciencelet-w.svg"
                 alt="Sciencelet"
                 width={108}

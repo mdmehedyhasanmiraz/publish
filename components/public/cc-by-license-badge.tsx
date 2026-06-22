@@ -25,12 +25,11 @@ export function CcByLicenseBadge({ className, showCaption }: Props) {
         rel="license noopener noreferrer"
         className="inline-flex items-center"
       >
-        <Image
+        <img
           src="https://licensebuttons.net/l/by/4.0/88x31.png"
           alt="Creative Commons Attribution 4.0 International"
           width={88}
           height={31}
-          unoptimized
         />
       </Link>
     </div>

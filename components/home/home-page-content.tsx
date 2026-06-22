@@ -101,6 +101,7 @@ export async function HomePageContent() {
             fill
             className="object-cover object-center opacity-65 md:opacity-85"
             priority
+            suppressHydrationWarning
           />
           {/* Linear gradient fading to the dark background color */}
           <div className="absolute inset-y-0 left-0 w-full bg-gradient-to-r from-slate-950 via-slate-950/50 to-transparent" />
@@ -163,7 +164,7 @@ export async function HomePageContent() {
           <div className="flex flex-col gap-8 rounded-2xl border border-border bg-muted/20 p-6 md:flex-row md:items-center md:justify-between md:gap-10 md:p-8">
             <div className="min-w-0 flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
               <div className="shrink-0">
-                <Image
+                <img
                   src="/logos/logo-openaccess.svg"
                   alt="Open access"
                   width={200}

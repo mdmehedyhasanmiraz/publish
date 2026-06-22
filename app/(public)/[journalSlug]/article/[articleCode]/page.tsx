@@ -187,7 +187,7 @@ export default async function ArticlePage({ params }: Props) {
       : "";
   const hasAbstractHeadingInBody = /(^|\n)#{1,3}\s*abstract\b/i.test(mdBody);
 
-  const { html: bodyHtml, toc: bodyToc } = renderArticleMarkdownToHtmlWithToc(mdBody, (assets ?? []) as never);
+  const { html: bodyHtml, toc: bodyToc } = renderArticleMarkdownToHtmlWithToc(mdBody, (assets ?? []) as never, { superscriptCitations: false });
 
   /** Sidebar outline from article body headings (`##` + `###`). */
   const tocItems: ArticleTocItem[] = [...bodyToc];
@@ -285,6 +285,7 @@ export default async function ArticlePage({ params }: Props) {
               bodyHtml={bodyHtml}
               assets={(assets ?? []) as never}
               paragraphFont="stix-two-text"
+              superscriptCitations={false}
             />
           </section>
 

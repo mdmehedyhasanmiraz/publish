@@ -23,6 +23,7 @@ export function ArticlePreview({
   abstractMarkdown,
   references,
   paragraphFont = "inherit",
+  superscriptCitations = true,
 }: {
   markdownBody: string;
   /** When set, used as the article body HTML instead of rendering `markdownBody` (e.g. pre-built with heading ids). */
@@ -33,12 +34,13 @@ export function ArticlePreview({
   references?: ArticleReferenceRow[];
   /** Body paragraphs only; headings keep the site default font. */
   paragraphFont?: "inherit" | "eb-garamond" | "stix-two-text";
+  superscriptCitations?: boolean;
 }) {
   const sorted = [...assets].sort((a, b) => a.sort_order - b.sort_order);
   const abstractHtml = abstractMarkdown?.trim()
-    ? renderArticleMarkdownToHtml(abstractMarkdown, [])
+    ? renderArticleMarkdownToHtml(abstractMarkdown, [], { superscriptCitations })
     : "";
-  const html = bodyHtml ?? renderArticleMarkdownToHtml(markdownBody, sorted);
+  const html = bodyHtml ?? renderArticleMarkdownToHtml(markdownBody, sorted, { superscriptCitations });
   return (
     <div
       className={cn(
