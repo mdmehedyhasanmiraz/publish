@@ -38,8 +38,8 @@ export default async function AdminIssueDetailPage({
         {journalSlug ? (
           <>
             {" "}
-            (<Link className="text-primary hover:underline" href={`/j/${journalSlug}`}>
-              /j/{journalSlug}
+            (<Link className="text-primary hover:underline" href={`${journalSlug}`}>
+              {journalSlug}
             </Link>
             )
           </>

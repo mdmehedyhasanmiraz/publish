@@ -11,5 +11,5 @@ export function normalizeManuscriptReferenceCodeParam(raw: string): string {
 
 export function publicArticlePath(journalSlug: string, manuscriptReferenceCode: string): string {
   const code = manuscriptReferenceCode.trim();
-  return `/j/${journalSlug}/article/${encodeURIComponent(code)}`;
+  return `${journalSlug}/article/${encodeURIComponent(code)}`;
 }

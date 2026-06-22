@@ -28,7 +28,7 @@ export default async function AdminSubmissionsPage() {
                   </p>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Journal: {j?.name ?? "—"} {j?.slug ? `(/j/${j.slug})` : ""}
+                  Journal: {j?.name ?? "—"} {j?.slug ? `(${j.slug})` : ""}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">Owner user: {s.owner_user_id}</p>
                 <div className="mt-2">

@@ -93,15 +93,30 @@ export async function HomePageContent() {
         className="relative flex min-h-[36rem] flex-col overflow-hidden border-b border-slate-800 bg-slate-950 md:min-h-[42rem] lg:min-h-[min(82vh,46rem)]"
         aria-labelledby="home-hero-heading"
       >
+        {/* Background Image with Gradient Overlay */}
+        <div className="absolute inset-y-0 right-0 w-full md:w-[60%] lg:w-[65%] pointer-events-none select-none z-0">
+          <Image
+            src="/images/hero.webp"
+            alt=""
+            fill
+            className="object-cover object-center opacity-65 md:opacity-85"
+            priority
+          />
+          {/* Linear gradient fading to the dark background color */}
+          <div className="absolute inset-y-0 left-0 w-full bg-gradient-to-r from-slate-950 via-slate-950/50 to-transparent" />
+          {/* Vertical fade to hide bottom edge on mobile/tablet */}
+          <div className="absolute inset-x-0 bottom-0 h-full bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent md:hidden" />
+        </div>
+
         <div
-          className="pointer-events-none absolute inset-0 overflow-hidden"
+          className="pointer-events-none absolute inset-0 overflow-hidden z-0"
           aria-hidden
         >
           <div
-            className="absolute -right-[18%] top-[8%] h-[min(110vw,38rem)] w-[min(110vw,38rem)] rounded-full bg-teal-500/35 blur-[120px] motion-reduce:animate-none motion-safe:animate-hero-orb"
+            className="absolute -right-[18%] top-[8%] h-[min(110vw,38rem)] w-[min(110vw,38rem)] rounded-full bg-teal-500/20 blur-[120px] motion-reduce:animate-none motion-safe:animate-hero-orb"
           />
           <div
-            className="absolute -right-[8%] bottom-[0%] h-[min(95vw,30rem)] w-[min(95vw,30rem)] rounded-full bg-cyan-400/[0.18] blur-[100px] motion-reduce:animate-none motion-safe:animate-hero-orb-soft motion-safe:[animation-delay:4s]"
+            className="absolute -right-[8%] bottom-[0%] h-[min(95vw,30rem)] w-[min(95vw,30rem)] rounded-full bg-cyan-400/[0.1] blur-[100px] motion-reduce:animate-none motion-safe:animate-hero-orb-soft motion-safe:[animation-delay:4s]"
           />
         </div>
         <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col justify-center px-6 py-16 md:py-20 lg:py-24">
@@ -177,7 +192,7 @@ export async function HomePageContent() {
             <div className="flex shrink-0 flex-col gap-3 border-t border-border pt-6 md:border-l md:border-t-0 md:pl-8 md:pt-0">
               <CcByLicenseBadge showCaption className="md:text-right" />
               <p className="max-w-[14rem] text-xs text-muted-foreground md:ml-auto md:text-right">
-                License buttons link to the official Creative Commons deed for attribution (CC BY) use.
+                Creative Commons Attribution (CC BY) 4.0 International license
               </p>
             </div>
           </div>
@@ -202,7 +217,7 @@ export async function HomePageContent() {
                 return (
                   <li key={j.id}>
                     <Link
-                      href={`/j/${j.slug}`}
+                      href={`${j.slug}`}
                       className="group flex flex-col items-center gap-3 text-center"
                     >
                       <JournalCoverImage
@@ -311,10 +326,10 @@ export async function HomePageContent() {
                 const date =
                   a.published_at && !Number.isNaN(new Date(a.published_at as string).getTime())
                     ? new Date(a.published_at as string).toLocaleDateString(undefined, {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })
                     : null;
                 const abstract =
                   typeof a.abstract === "string" && a.abstract.trim()
@@ -334,7 +349,7 @@ export async function HomePageContent() {
                         <p className="mt-1 text-sm text-muted-foreground">
                           {j?.name ? (
                             <>
-                              <Link href={`/j/${j.slug}`} className="font-medium text-foreground hover:underline">
+                              <Link href={`${j.slug}`} className="font-medium text-foreground hover:underline">
                                 {j.name}
                               </Link>
                               {date ? <span aria-hidden> · </span> : null}

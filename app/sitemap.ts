@@ -44,19 +44,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const now = new Date();
     entries.push(
       {
-        url: `${base}/j/${slug}`,
+        url: `${base}${slug}`,
         lastModified: now,
         changeFrequency: "weekly",
         priority: 0.85,
       },
       {
-        url: `${base}/j/${slug}/archive`,
+        url: `${base}${slug}/archive`,
         lastModified: now,
         changeFrequency: "weekly",
         priority: 0.75,
       },
       {
-        url: `${base}/j/${slug}/aims-and-scope`,
+        url: `${base}${slug}/aims-and-scope`,
         lastModified: now,
         changeFrequency: "monthly",
         priority: 0.65,
@@ -77,7 +77,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       typeof row.manuscript_reference_code === "string" ? row.manuscript_reference_code.trim() : "";
     if (!js || !code) continue;
     entries.push({
-      url: `${base}/j/${js}/article/${encodeURIComponent(code)}`,
+      url: `${base}${js}/article/${encodeURIComponent(code)}`,
       lastModified: row.published_at ? new Date(row.published_at as string) : new Date(),
       changeFrequency: "monthly",
       priority: 0.6,

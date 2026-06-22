@@ -20,9 +20,9 @@ function supabaseImageRemotePattern(): NonNullable<NextConfig["images"]>["remote
 
 const nextConfig: NextConfig = {
   cacheComponents: false,
-  turbopack: {
-    root: path.resolve(__dirname),
-  },
+//   turbopack: {
+//     root: path.resolve(__dirname),
+//   },
   images: {
     remotePatterns: supabaseImageRemotePattern(),
   },

@@ -78,7 +78,7 @@ export function PeerReviewReportForm({
               {key === "relevance_to_journal_scope" && journalSlug ? (
                 <p>
                   <Link
-                    href={`/j/${journalSlug}/aims-and-scope`}
+                    href={`${journalSlug}/aims-and-scope`}
                     className="font-medium text-primary underline underline-offset-2 hover:no-underline"
                     target="_blank"
                     rel="noopener noreferrer"

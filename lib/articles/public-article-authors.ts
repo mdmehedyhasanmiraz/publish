@@ -5,7 +5,9 @@ export type PublicArticleAuthorRow = {
   middle_name?: string;
   last_name?: string;
   suffix?: string;
+  display_name?: string;
   email?: string;
+  phone?: string;
   orcid_id?: string;
   is_corresponding_author?: boolean;
   address_line1?: string;
@@ -14,6 +16,7 @@ export type PublicArticleAuthorRow = {
   state_region?: string;
   postal_code?: string;
   country_code?: string;
+  credit_roles?: string[];
   affiliations?: Array<{
     institution_name?: string;
     department?: string;

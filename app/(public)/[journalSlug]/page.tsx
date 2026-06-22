@@ -65,13 +65,13 @@ export default async function JournalHomePage({ params }: Props) {
               <div className="flex flex-wrap gap-3">
                 <Link
                   className="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-teal-700"
-                  href={`/j/${journal.slug}/archive`}
+                  href={`${journal.slug}/archive`}
                 >
                   Archive
                 </Link>
                 <Link
                   className="rounded-md border border-border bg-white px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
-                  href={`/j/${journal.slug}/aims-and-scope`}
+                  href={`${journal.slug}/aims-and-scope`}
                 >
                   Aims &amp; scope
                 </Link>

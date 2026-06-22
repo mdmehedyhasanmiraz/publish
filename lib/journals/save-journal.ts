@@ -66,8 +66,8 @@ export async function saveJournalFromFormData(formData: FormData): Promise<Journ
       revalidatePath("/admin/journals");
       revalidatePath(`/admin/journals/${journalId}`);
       revalidatePath("/journals");
-      revalidatePath(`/j/${slug}`);
-      revalidatePath(`/j/${slug}/archive`);
+      revalidatePath(`${slug}`);
+      revalidatePath(`${slug}/archive`);
       return { ok: true, id: journalId, message: "Journal updated." };
     }
 
@@ -90,8 +90,8 @@ export async function saveJournalFromFormData(formData: FormData): Promise<Journ
 
     revalidatePath("/admin/journals");
     revalidatePath("/journals");
-    revalidatePath(`/j/${slug}`);
-    revalidatePath(`/j/${slug}/archive`);
+    revalidatePath(`${slug}`);
+    revalidatePath(`${slug}/archive`);
     return { ok: true, id: data.id, message: "Journal created." };
   } catch (e: unknown) {
     console.error("saveJournalFromFormData", e);

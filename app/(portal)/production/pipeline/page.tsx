@@ -54,7 +54,7 @@ export default async function ProductionPipelinePage() {
               const js = (j as { slug?: string } | undefined)?.slug;
               const code = (a as { manuscript_reference_code?: string | null }).manuscript_reference_code?.trim();
               const publicPath =
-                js && code ? `/j/${js}/article/${encodeURIComponent(code)}` : null;
+                js && code ? `${js}/article/${encodeURIComponent(code)}` : null;
               const i = Array.isArray(a.issues) ? a.issues[0] : a.issues;
               return (
                 <div key={a.id} className="rounded border p-3">

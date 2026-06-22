@@ -31,7 +31,7 @@ export function JournalEditorPage({ mode, journal }: JournalEditorPageProps) {
       <h2 className="mt-2 text-xl font-semibold">{isEdit ? "Edit journal" : "Create journal"}</h2>
       <p className="mt-2 text-sm text-slate-500">
         {isEdit ? "Update journal details." : "Add a new journal."} The slug is used in public URLs:{" "}
-        <code className="rounded bg-gray-100 px-1">/j/{"{slug}"}</code>
+        <code className="rounded bg-gray-100 px-1">{"{slug}"}</code>
       </p>
       <div className="mt-6">
         <CreateJournalForm journal={journal} />

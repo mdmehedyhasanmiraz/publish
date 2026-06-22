@@ -2,6 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
+import CodeMirror from "@uiw/react-codemirror";
+import { xml } from "@codemirror/lang-xml";
+import { oneDark } from "@codemirror/theme-one-dark";
 import {
   publishArticleVersionAction,
   saveArticleVersionAction,
@@ -124,6 +127,75 @@ function CopyTextButton(props: { label: string; text: string }) {
       {done ? "Copied" : props.label}
     </Button>
   );
+}
+
+function prettyPrintXml(raw: string): string {
+  if (!raw.trim()) return raw;
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(raw, "application/xml");
+  if (doc.querySelector("parsererror")) return raw;
+  const INDENT = "  ";
+  const escapeText = (s: string) =>
+    s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  const pad = (n: number) => INDENT.repeat(Math.max(0, n));
+
+  const formatNode = (node: Node, level: number): string[] => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = (node.nodeValue ?? "").trim();
+      return text ? [`${pad(level)}${escapeText(text)}`] : [];
+    }
+    if (node.nodeType === Node.COMMENT_NODE) {
+      const text = (node.nodeValue ?? "").trim();
+      return [`${pad(level)}<!-- ${text} -->`];
+    }
+    if (node.nodeType === Node.CDATA_SECTION_NODE) {
+      return [`${pad(level)}<![CDATA[${node.nodeValue ?? ""}]]>`];
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return [];
+
+    const el = node as Element;
+    const attrs = Array.from(el.attributes)
+      .map((a) => ` ${a.name}="${a.value}"`)
+      .join("");
+    const open = `<${el.tagName}${attrs}>`;
+    const close = `</${el.tagName}>`;
+    const children = Array.from(el.childNodes);
+
+    if (children.length === 0) {
+      return [`${pad(level)}<${el.tagName}${attrs}/>`];
+    }
+
+    if (
+      children.length === 1 &&
+      children[0]?.nodeType === Node.TEXT_NODE &&
+      (children[0].nodeValue ?? "").trim()
+    ) {
+      const text = escapeText((children[0].nodeValue ?? "").trim());
+      return [`${pad(level)}${open}${text}${close}`];
+    }
+
+    const out = [`${pad(level)}${open}`];
+    for (const child of children) out.push(...formatNode(child, level + 1));
+    out.push(`${pad(level)}${close}`);
+    return out;
+  };
+
+  const lines: string[] = [];
+  lines.push('<?xml version="1.0" encoding="UTF-8"?>');
+  const dt = doc.doctype;
+  if (dt) {
+    if (dt.publicId) {
+      lines.push(`<!DOCTYPE ${dt.name} PUBLIC "${dt.publicId}" "${dt.systemId}">`);
+    } else if (dt.systemId) {
+      lines.push(`<!DOCTYPE ${dt.name} SYSTEM "${dt.systemId}">`);
+    } else {
+      lines.push(`<!DOCTYPE ${dt.name}>`);
+    }
+  }
+  if (doc.documentElement) {
+    lines.push(...formatNode(doc.documentElement, 0));
+  }
+  return lines.join("\n").trim();
 }
 
 export function ArticleEditorForm(props: {
@@ -367,6 +439,15 @@ export function ArticleEditorForm(props: {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">Article body (JATS XML)</h2>
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => setJatsXmlBody((prev) => prettyPrintXml(prev))}
+            >
+              Pretty print XML
+            </Button>
             {props.submissionId ? (
               <Button
                 type="button"
@@ -399,7 +480,7 @@ export function ArticleEditorForm(props: {
                       setImportNote(r.message);
                       return;
                     }
-                    setJatsXmlBody(r.jatsXml);
+                    setJatsXmlBody(prettyPrintXml(r.jatsXml));
                     setImportNote(
                       r.warnings.length
                         ? `Imported. Notes: ${r.warnings.slice(0, 4).join("; ")}`
@@ -458,7 +539,22 @@ export function ArticleEditorForm(props: {
             </div>
           </div>
         ) : null}
-        <Textarea className="mt-3 font-mono text-sm" rows={18} value={jatsXmlBody} onChange={(e) => setJatsXmlBody(e.target.value)} />
+        <div className="mt-3 overflow-hidden rounded-lg border border-slate-700">
+          <CodeMirror
+            value={jatsXmlBody}
+            height="520px"
+            theme={oneDark}
+            extensions={[xml()]}
+            onChange={(value) => setJatsXmlBody(value)}
+            basicSetup={{
+              lineNumbers: true,
+              foldGutter: true,
+              autocompletion: true,
+              highlightActiveLine: true,
+              highlightSelectionMatches: true,
+            }}
+          />
+        </div>
         <div className="mt-3">
           <Button disabled={pending} onClick={save}>
             {pending ? "Saving..." : "Save draft"}

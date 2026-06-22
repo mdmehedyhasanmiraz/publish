@@ -30,7 +30,7 @@ export default async function JournalsPage() {
               return (
                 <li key={j.id}>
                   <Link
-                    href={`/j/${j.slug}`}
+                    href={`${j.slug}`}
                     className="flex h-full flex-col rounded-lg border border-border bg-white p-5 shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/30"
                   >
                     <JournalCoverImage

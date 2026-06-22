@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
+import { NotificationPrompt } from "@/components/public/notification-prompt";
 
 const defaultUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
@@ -16,8 +17,7 @@ export const metadata: Metadata = {
     "Sciencelet is an independent STM publisher of open access journals in AI, life sciences, and related technical fields.",
 };
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
   display: "swap",
   subsets: ["latin"],
 });
@@ -29,8 +29,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="light">
-      <body className={`${geistSans.className} min-w-0 antialiased`}>
+      <body className={`${inter.className} min-w-0 antialiased`}>
         {children}
+        <NotificationPrompt />
       </body>
     </html>
   );

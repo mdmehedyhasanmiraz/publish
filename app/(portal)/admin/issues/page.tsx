@@ -40,7 +40,7 @@ export default async function AdminIssuesPage() {
                   </p>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Journal: {j?.name ?? "—"} {j?.slug ? `(/j/${j.slug})` : ""}
+                  Journal: {j?.name ?? "—"} {j?.slug ? `(${j.slug})` : ""}
                 </p>
               </div>
             );

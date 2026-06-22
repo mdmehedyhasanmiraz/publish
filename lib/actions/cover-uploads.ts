@@ -91,8 +91,8 @@ export async function uploadJournalCoverAction(_prev: CoverUploadState | undefin
   revalidatePath(`/admin/journals/${journalId}`);
   revalidatePath("/journals");
   if (slug) {
-    revalidatePath(`/j/${slug}`);
-    revalidatePath(`/j/${slug}/archive`);
+    revalidatePath(`${slug}`);
+    revalidatePath(`${slug}/archive`);
   }
   return { ok: true, message: "Cover updated." };
 }
@@ -116,8 +116,8 @@ export async function removeJournalCoverAction(journalId: string): Promise<Cover
   revalidatePath(`/admin/journals/${id}`);
   revalidatePath("/journals");
   if (slug) {
-    revalidatePath(`/j/${slug}`);
-    revalidatePath(`/j/${slug}/archive`);
+    revalidatePath(`${slug}`);
+    revalidatePath(`${slug}/archive`);
   }
   return { ok: true, message: "Cover removed." };
 }
@@ -145,8 +145,8 @@ export async function selectJournalCoverAction(_prev: CoverUploadState | undefin
   revalidatePath(`/admin/journals/${journalId}`);
   revalidatePath("/journals");
   if (slug) {
-    revalidatePath(`/j/${slug}`);
-    revalidatePath(`/j/${slug}/archive`);
+    revalidatePath(`${slug}`);
+    revalidatePath(`${slug}/archive`);
   }
   return { ok: true, message: "Cover updated." };
 }
@@ -188,8 +188,8 @@ export async function uploadIssueCoverAction(_prev: CoverUploadState | undefined
   revalidatePath("/admin/issues");
   revalidatePath(`/admin/issues/${issueId}`);
   if (journalSlug) {
-    revalidatePath(`/j/${journalSlug}`);
-    revalidatePath(`/j/${journalSlug}/archive`);
+    revalidatePath(`${journalSlug}`);
+    revalidatePath(`${journalSlug}/archive`);
   }
   return { ok: true, message: "Issue cover updated." };
 }
@@ -217,8 +217,8 @@ export async function removeIssueCoverAction(issueId: string): Promise<CoverUplo
   revalidatePath("/admin/issues");
   revalidatePath(`/admin/issues/${id}`);
   if (journalSlug) {
-    revalidatePath(`/j/${journalSlug}`);
-    revalidatePath(`/j/${journalSlug}/archive`);
+    revalidatePath(`${journalSlug}`);
+    revalidatePath(`${journalSlug}/archive`);
   }
   return { ok: true, message: "Issue cover removed." };
 }

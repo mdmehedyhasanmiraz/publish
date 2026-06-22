@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -29,29 +30,7 @@ type PublicJournalArticleHeader = {
   issn_online: string | null;
 };
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { journalSlug, articleCode: articleCodeRaw } = await params;
-  const articleCode = normalizeManuscriptReferenceCodeParam(articleCodeRaw);
-  const supabase = await createClient();
-
-  const { data: journal } = await supabase.from("journals").select("id").eq("slug", journalSlug).maybeSingle();
-  if (!journal?.id) {
-    return { title: `${articleCodeRaw} | Sciencelet` };
-  }
-
-  const { data: article } = await supabase
-    .from("articles")
-    .select("title")
-    .eq("journal_id", journal.id)
-    .eq("manuscript_reference_code", articleCode)
-    .eq("status", "published")
-    .maybeSingle();
-
-  return { title: `${(article?.title as string) ?? articleCodeRaw} | Sciencelet` };
-}
-
-export default async function ArticlePage({ params }: Props) {
-  const { journalSlug, articleCode: articleCodeRaw } = await params;
+const getArticleData = cache(async (journalSlug: string, articleCodeRaw: string) => {
   const articleCode = normalizeManuscriptReferenceCodeParam(articleCodeRaw);
   const supabase = await createClient();
 
@@ -60,7 +39,7 @@ export default async function ArticlePage({ params }: Props) {
     .select("id, name, slug, cover_image_path, issn_print, issn_online")
     .eq("slug", journalSlug)
     .maybeSingle();
-  if (!journalRaw?.id) notFound();
+  if (!journalRaw?.id) return null;
   const journal = journalRaw as PublicJournalArticleHeader;
 
   const { data: article } = await supabase
@@ -70,7 +49,7 @@ export default async function ArticlePage({ params }: Props) {
     .eq("manuscript_reference_code", articleCode)
     .eq("status", "published")
     .maybeSingle();
-  if (!article?.current_version_id) notFound();
+  if (!article?.current_version_id) return null;
 
   const { data: version } = await supabase
     .from("article_versions")
@@ -78,7 +57,7 @@ export default async function ArticlePage({ params }: Props) {
     .eq("id", article.current_version_id as string)
     .eq("workflow_status", "published")
     .maybeSingle();
-  if (!version) notFound();
+  if (!version) return null;
 
   const [{ data: assets }, { data: submission }] = await Promise.all([
     supabase
@@ -95,6 +74,111 @@ export default async function ArticlePage({ params }: Props) {
   const authorAffiliations: PublicArticleAuthorRow[] = Array.isArray(submission?.author_affiliations)
     ? (submission.author_affiliations as PublicArticleAuthorRow[])
     : [];
+
+  return {
+    journal,
+    article,
+    version,
+    assets: assets ?? [],
+    authorAffiliations,
+  };
+});
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { journalSlug, articleCode: articleCodeRaw } = await params;
+  const data = await getArticleData(journalSlug, articleCodeRaw);
+  if (!data) {
+    return { title: `${articleCodeRaw} | Sciencelet` };
+  }
+
+  const { journal, article, version, authorAffiliations } = data;
+  const articleTitle = ((version.title as string) || (article.title as string)).trim();
+  const articleAbstract = (version.abstract as string | null || article.abstract as string | null || "").trim();
+  
+  const keywordsArray = Array.isArray(article.keywords) ? (article.keywords as string[]) : [];
+  const doiDisplay = (article.doi as string | null)?.trim() || null;
+  const publishedAtStr = article.published_at as string | null;
+  
+  const formattedPublishDate = publishedAtStr 
+    ? new Date(publishedAtStr).toISOString().split('T')[0].replace(/-/g, '/')
+    : "";
+
+  const authorNames = authorAffiliations.map(author => {
+    return [author.first_name, author.middle_name, author.last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+  }).filter(Boolean);
+
+  const canonicalPath = publicArticlePath(journalSlug, String(article.manuscript_reference_code || articleCodeRaw).trim());
+  const articleUrl = `${getPublicSiteUrl()}${canonicalPath}`;
+
+  const otherMeta: Record<string, string | string[]> = {
+    // Dublin Core Metadata
+    "dc.title": articleTitle,
+    "dc.date": publishedAtStr ? publishedAtStr.split('T')[0] : "",
+    "dc.relation": journal.name ?? journalSlug,
+    "dc.language": "en",
+    
+    // Google Scholar / HighWire Press Metadata
+    "citation_title": articleTitle,
+    "citation_journal_title": journal.name ?? journalSlug,
+    "citation_abstract_html_url": articleUrl,
+  };
+
+  if (authorNames.length > 0) {
+    otherMeta["dc.creator"] = authorNames;
+    otherMeta["citation_author"] = authorNames;
+  }
+
+  if (doiDisplay) {
+    otherMeta["dc.identifier"] = `doi:${doiDisplay}`;
+    otherMeta["citation_doi"] = doiDisplay;
+  } else {
+    otherMeta["dc.identifier"] = articleUrl;
+  }
+
+  if (articleAbstract) {
+    otherMeta["dc.description"] = articleAbstract;
+  }
+
+  if (keywordsArray.length > 0) {
+    otherMeta["dc.subject"] = keywordsArray.join("; ");
+    otherMeta["citation_keywords"] = keywordsArray.join(", ");
+  }
+
+  if (formattedPublishDate) {
+    otherMeta["citation_publication_date"] = formattedPublishDate;
+  }
+
+  if (journal.issn_print) {
+    otherMeta["citation_issn"] = journal.issn_print;
+  }
+  if (journal.issn_online) {
+    if (Array.isArray(otherMeta["citation_issn"])) {
+      (otherMeta["citation_issn"] as string[]).push(journal.issn_online);
+    } else if (typeof otherMeta["citation_issn"] === "string") {
+      otherMeta["citation_issn"] = [otherMeta["citation_issn"], journal.issn_online];
+    } else {
+      otherMeta["citation_issn"] = journal.issn_online;
+    }
+  }
+
+  return {
+    title: `${articleTitle} | Sciencelet`,
+    description: articleAbstract || undefined,
+    keywords: keywordsArray.length > 0 ? keywordsArray : undefined,
+    other: otherMeta,
+  };
+}
+
+export default async function ArticlePage({ params }: Props) {
+  const { journalSlug, articleCode: articleCodeRaw } = await params;
+  const articleCode = normalizeManuscriptReferenceCodeParam(articleCodeRaw);
+  const data = await getArticleData(journalSlug, articleCodeRaw);
+  if (!data) notFound();
+
+  const { journal, article, version, assets, authorAffiliations } = data;
   const coverSrc = publicCoverUrl(journal.cover_image_path ?? null);
 
   const mdBody =

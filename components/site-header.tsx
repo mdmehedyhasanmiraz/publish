@@ -125,13 +125,12 @@ export function SiteHeader() {
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <Link href="/" className="inline-flex">
-              <Image
+              <img
                 src="/logos/logo-sciencelet.svg"
                 alt="Sciencelet"
                 width={60}
                 height={10}
                 className="h-7 w-auto"
-                priority
               />
             </Link>
           </div>

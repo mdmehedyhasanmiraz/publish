@@ -49,7 +49,7 @@ export default async function ArchivePage({ params }: Props) {
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
       <p className="text-sm text-muted-foreground">
-        <Link href={`/j/${journal.slug}`} className="font-medium text-primary hover:underline">
+        <Link href={`${journal.slug}`} className="font-medium text-primary hover:underline">
           ← {journal.name}
         </Link>
       </p>

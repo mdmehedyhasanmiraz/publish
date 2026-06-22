@@ -34,5 +34,6 @@ export type WizardAuthorRow = {
   postal_code: string;
   country_code: string;
   affiliations: WizardAuthorAffiliation[];
+  credit_roles?: string[];
   is_corresponding_author?: boolean;
 };

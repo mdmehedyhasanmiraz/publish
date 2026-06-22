@@ -35,7 +35,7 @@ export default async function EditorArticlesPage() {
               const js = (j as { slug?: string } | undefined)?.slug;
               const code = (a as { manuscript_reference_code?: string | null }).manuscript_reference_code?.trim();
               const publicPath =
-                js && code ? `/j/${js}/article/${encodeURIComponent(code)}` : null;
+                js && code ? `${js}/article/${encodeURIComponent(code)}` : null;
               return (
                 <Link key={a.id} href={`/editor/articles/${a.id}`} className="rounded border p-3 hover:bg-muted/20">
                   <p className="font-medium">{a.title}</p>

@@ -1,5 +1,6 @@
 import type { PublicArticleAuthorRow } from "@/lib/articles/public-article-authors";
 import { formatAffiliationFootnoteText } from "@/lib/articles/public-article-authors";
+import { creditTermIdentifier, normalizeCreditRole } from "@/lib/articles/credit-roles";
 
 function escapeXml(s: string) {
   return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
@@ -76,6 +77,10 @@ export function markdownToJatsXml(input: {
   const blocks: string[] = [];
   const refs: Array<{ n: string; text: string }> = [];
   const authors = Array.isArray(input.authors) ? input.authors : [];
+  const now = new Date();
+  const year = String(now.getUTCFullYear());
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(now.getUTCDate()).padStart(2, "0");
 
   // Very small inline conversion: keep <sup>/<sub>, convert ** and *.
   const inlineToJats = (raw: string) => {
@@ -180,7 +185,8 @@ export function markdownToJatsXml(input: {
         String(af.country_code ?? author.country_code ?? "").trim().toLowerCase(),
       ].join("|");
 
-    const contribs = authors.map((author) => {
+    const correspondingAuthor = authors.find((a) => Boolean(a.is_corresponding_author));
+    const contribs = authors.map((author, idx) => {
       const given = normalizeWhitespace([author.first_name, author.middle_name].filter(Boolean).join(" "));
       const surname = normalizeWhitespace([author.last_name, author.suffix].filter(Boolean).join(" "));
       const fallback = normalizeWhitespace(author.display_name ?? "") || "Author";
@@ -203,7 +209,7 @@ export function markdownToJatsXml(input: {
         if (idx && !affRefs.includes(idx)) affRefs.push(idx);
       }
 
-      const xrefs = affRefs.map((n) => `<xref ref-type="aff" rid="aff${n}">${n}</xref>`).join("");
+      const xrefs = affRefs.map((n) => `<xref ref-type="aff" rid="af${n}">${n}</xref>`).join("");
       const orcid = String(author.orcid_id ?? "").trim();
       const orcidHref = orcid
         ? /^https?:\/\//i.test(orcid)
@@ -211,33 +217,70 @@ export function markdownToJatsXml(input: {
           : `https://orcid.org/${orcid.replace(/^\/+/, "")}`
         : "";
       const orcidXml = orcidHref
-        ? `<contrib-id contrib-id-type="orcid">${escapeXml(orcidHref.replace(/^https?:\/\/orcid\.org\//i, ""))}</contrib-id>`
+        ? `<contrib-id contrib-id-type="orcid" authenticated="true">${escapeXml(orcidHref)}</contrib-id>`
         : "";
-      return `<contrib contrib-type="author">${nameXml}${xrefs}${orcidXml}</contrib>`;
+      const rolesRaw = Array.isArray(author.credit_roles) ? author.credit_roles : [];
+      const seen = new Set<string>();
+      const rolesXml = rolesRaw
+        .map((r) => String(r ?? "").trim())
+        .filter(Boolean)
+        .filter((r) => {
+          const key = normalizeCreditRole(r);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .map((role) => {
+          const term = escapeXml(role);
+          const termId = escapeXml(creditTermIdentifier(role));
+          return `<role vocab="credit" vocab-identifier="https://credit.niso.org/" vocab-term="${term}" vocab-term-identifier="${termId}">${term}</role>`;
+        })
+        .join("");
+      const isCorresp = Boolean(author.is_corresponding_author);
+      const correspXref = isCorresp ? `<xref rid="c1" ref-type="corresp">*</xref>` : "";
+      return `<contrib contrib-type="author" id="A${idx + 1}">${orcidXml}${nameXml}${rolesXml}${xrefs}${correspXref}</contrib>`;
     });
 
     const affXml = affTexts
-      .map((text, i) => `<aff id="aff${i + 1}"><label>${i + 1}</label>${escapeXml(text)}</aff>`)
+      .map((text, i) => `<aff id="af${i + 1}"><label>${i + 1}</label>${escapeXml(text)}</aff>`)
       .join("");
-    return `<contrib-group>${contribs.join("")}</contrib-group>${affXml}`;
+    const correspXml = correspondingAuthor
+      ? `<author-notes><corresp id="c1"><label>*</label>Correspondence: <email>${escapeXml(String(correspondingAuthor.email ?? "").trim())}</email>${String(correspondingAuthor.phone ?? "").trim() ? `; Tel.: ${escapeXml(String(correspondingAuthor.phone ?? "").trim())}` : ""}</corresp></author-notes>`
+      : "";
+    return `<contrib-group>${contribs.join("")}</contrib-group>${affXml}${correspXml}`;
   })();
-  const backXml = refs.length
-    ? `<back><ref-list><title>References</title>${refs
-        .map(
-          (r) =>
-            `<ref id="R${escapeXml(r.n)}"><label>${escapeXml(r.n)}</label><mixed-citation>${inlineToJats(r.text)}</mixed-citation></ref>`,
-        )
-        .join("")}</ref-list></back>`
-    : "";
+  const backXml = `<back><notes><title>Author Contributions</title><p>CRediT roles are captured per author in the submission workflow and encoded in each contrib role element.</p></notes><ack><title>Acknowledgments</title><p>The authors thank contributors and institutions supporting this work.</p></ack><fn-group><fn id="conflict"><p>The authors declare no conflict of interest.</p></fn></fn-group>${refs.length ? `<ref-list><title>References</title>${refs
+    .map(
+      (r) =>
+        `<ref id="B${escapeXml(r.n)}"><label>${escapeXml(r.n)}</label><mixed-citation>${inlineToJats(r.text)}</mixed-citation></ref>`,
+    )
+    .join("")}</ref-list>` : ""}</back>`;
 
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
-    `<article xmlns:xlink="http://www.w3.org/1999/xlink">`,
+    `<!DOCTYPE article PUBLIC "-//NLM//DTD JATS (Z39.96) Journal Publishing DTD v1.3 20210610//EN" "JATS-journalpublishing1-3.dtd">`,
+    `<article xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:xlink="http://www.w3.org/1999/xlink" article-type="research-article" dtd-version="1.3" xml:lang="en">`,
     `<front>`,
+    `<journal-meta>`,
+    `<journal-id journal-id-type="publisher-id">journal-id</journal-id>`,
+    `<journal-title-group><journal-title>Journal Title</journal-title><abbrev-journal-title abbrev-type="publisher">J. Title</abbrev-journal-title><abbrev-journal-title abbrev-type="pubmed">Journal Title</abbrev-journal-title></journal-title-group>`,
+    `<issn pub-type="epub">0000-0000</issn>`,
+    `<publisher><publisher-name>Publisher</publisher-name></publisher>`,
+    `</journal-meta>`,
     `<article-meta>`,
+    `<article-id pub-id-type="doi">10.0000/placeholder-doi</article-id>`,
+    `<article-id pub-id-type="publisher-id">placeholder-article-id</article-id>`,
+    `<article-categories><subj-group><subject>Article</subject></subj-group></article-categories>`,
     `<title-group><article-title>${inlineToJats(title)}</article-title></title-group>`,
     contribXml,
     abstractXml,
+    `<pub-date pub-type="epub"><day>${day}</day><month>${month}</month><year>${year}</year></pub-date>`,
+    `<pub-date pub-type="collection"><month>${month}</month><year>${year}</year></pub-date>`,
+    `<volume>1</volume><issue>1</issue><elocation-id>1</elocation-id>`,
+    `<history><date date-type="received"><day>${day}</day><month>${month}</month><year>${year}</year></date><date date-type="rev-recd"><day>${day}</day><month>${month}</month><year>${year}</year></date><date date-type="accepted"><day>${day}</day><month>${month}</month><year>${year}</year></date></history>`,
+    `<permissions><copyright-statement>© ${year} by the authors.</copyright-statement><copyright-year>${year}</copyright-year><license license-type="open-access"><license-p>This article is distributed under the terms and conditions of the <ext-link ext-link-type="uri" xlink:href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution (CC BY) license</ext-link>.</license-p></license></permissions>`,
+    `<kwd-group/>`,
+    `<funding-group/>`,
     `</article-meta>`,
     `</front>`,
     `<body>${blocks.join("")}</body>`,

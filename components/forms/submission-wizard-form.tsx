@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { NISO_CREDIT_ROLES, normalizeCreditRole } from "@/lib/articles/credit-roles";
 import { useRouter } from "next/navigation";
 
 type Journal = {
@@ -63,6 +64,7 @@ type AuthorRow = {
   postal_code: string;
   country_code: string;
   affiliations: AuthorAffiliation[];
+  credit_roles: string[];
   account_status: "linked" | "pending_signup";
   is_corresponding_author: boolean;
 };
@@ -125,6 +127,7 @@ const emptyAuthor = (): AuthorRow => ({
   postal_code: "",
   country_code: "",
   affiliations: [emptyAffiliation()],
+  credit_roles: [],
   account_status: "pending_signup",
   is_corresponding_author: false,
 });
@@ -164,6 +167,7 @@ function normalizeAuthorsFromStorage(rows: AuthorRow[]): AuthorRow[] {
     ...emptyAuthor(),
     ...a,
     affiliations: Array.isArray(a.affiliations) && a.affiliations.length ? a.affiliations : [emptyAffiliation()],
+    credit_roles: Array.isArray(a.credit_roles) ? a.credit_roles : [],
     is_corresponding_author: Boolean(a.is_corresponding_author),
   }));
   if (withFlags.length && !withFlags.some((a) => a.is_corresponding_author)) {
@@ -594,6 +598,22 @@ export function SubmissionWizardForm({
       setMessage("");
       return prev.map((a, i) => (i === index ? { ...a, is_corresponding_author: checked } : a));
     });
+  }
+
+  function toggleCreditRole(index: number, role: string, checked: boolean) {
+    const normalizedRole = normalizeCreditRole(role);
+    setAuthors((prev) =>
+      prev.map((a, i) => {
+        if (i !== index) return a;
+        const current = Array.isArray(a.credit_roles) ? a.credit_roles : [];
+        const exists = current.some((r) => normalizeCreditRole(r) === normalizedRole);
+        if (checked && !exists) return { ...a, credit_roles: [...current, role] };
+        if (!checked && exists) {
+          return { ...a, credit_roles: current.filter((r) => normalizeCreditRole(r) !== normalizedRole) };
+        }
+        return a;
+      }),
+    );
   }
 
   const lastExtractedManuscriptKeyRef = useRef<string | null>(null);
@@ -1070,6 +1090,25 @@ export function SubmissionWizardForm({
                     <Label htmlFor={`author-corresponding-${editingAuthorIdx}`} className="cursor-pointer text-sm font-normal">
                       Corresponding author (max {MAX_CORRESPONDING_AUTHORS})
                     </Label>
+                  </div>
+                  <div className="rounded border bg-white p-3">
+                    <h4 className="text-sm font-semibold">CRediT author contributions (NISO)</h4>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Select all applicable contributor roles for this author.
+                    </p>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2">
+                      {NISO_CREDIT_ROLES.map((role) => {
+                        const checked = authors[editingAuthorIdx].credit_roles.some(
+                          (r) => normalizeCreditRole(r) === normalizeCreditRole(role),
+                        );
+                        return (
+                          <label key={`${editingAuthorIdx}-${role}`} className="flex cursor-pointer items-center gap-2 text-sm">
+                            <Checkbox checked={checked} onCheckedChange={(v) => toggleCreditRole(editingAuthorIdx, role, v === true)} />
+                            <span>{role}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
                   <div className="grid gap-3 md:grid-cols-4">
                     <Input placeholder="Salutation" value={authors[editingAuthorIdx].salutation} onChange={(e) => setAuthors((prev) => prev.map((a, i) => i === editingAuthorIdx ? { ...a, salutation: e.target.value } : a))} />

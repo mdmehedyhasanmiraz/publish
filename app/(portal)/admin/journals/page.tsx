@@ -30,7 +30,7 @@ export default async function AdminJournalsPage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-medium">{j.name}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">/j/{j.slug}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{j.slug}</p>
                   {(j.status || j.is_open_access) && (
                     <p className="mt-1 text-xs text-muted-foreground">
                       {[j.status, j.is_open_access ? "Open access" : null].filter(Boolean).join(" · ")}

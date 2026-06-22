@@ -38,7 +38,7 @@ export function JournalForAuthorsPanel(props: { journalSlug: string; journalName
         ))}
       </ul>
       <p className="mt-4 text-sm text-muted-foreground">
-        <Link href={`/j/${props.journalSlug}/aims-and-scope`} className="font-medium text-primary hover:underline">
+        <Link href={`${props.journalSlug}/aims-and-scope`} className="font-medium text-primary hover:underline">
           Aims &amp; scope
         </Link>{" "}
         ·{" "}

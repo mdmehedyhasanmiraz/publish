@@ -35,7 +35,7 @@ export default async function AdminVolumesPage() {
                   <p className="text-sm text-muted-foreground">{v.volume_slug}</p>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Journal: {j?.name ?? "—"} {j?.slug ? `(/j/${j.slug})` : ""}
+                  Journal: {j?.name ?? "—"} {j?.slug ? `(${j.slug})` : ""}
                 </p>
               </div>
             );

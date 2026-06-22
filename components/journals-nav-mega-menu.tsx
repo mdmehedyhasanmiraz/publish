@@ -109,7 +109,7 @@ export function JournalsNavDropdownPanel(props: { open: boolean; onClose: () => 
             {journals.map((j) => (
               <li key={j.id}>
                 <Link
-                  href={`/j/${j.slug}`}
+                  href={`${j.slug}`}
                   className="group flex flex-col items-center gap-3 text-center"
                   onClick={() => props.onClose()}
                 >
