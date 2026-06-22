@@ -597,3 +597,55 @@ export async function sendAuthorDecisionEmailAction(input: {
   revalidatePath("/editor/articles");
   return { ok: true as const };
 }
+
+export async function saveSubmissionAuthorsAction(submissionId: string, authors: any[]) {
+  const { createClient } = await import("@/lib/supabase/server");
+  const { profileRowToRoles, isPlatformAdminRole } = await import("@/lib/peer-review/workflow-access");
+  const { STAFF_ROLES } = await import("@/lib/auth/app-roles");
+  const { publicArticlePath } = await import("@/lib/articles/public-article-path");
+  const { revalidatePath } = await import("next/cache");
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, roles")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const roles = profileRowToRoles(profile);
+  const isStaff = STAFF_ROLES.some((r) => roles.includes(r)) || isPlatformAdminRole(roles, profile?.role as string | undefined);
+  if (!isStaff) return { ok: false as const, error: "Editor/Admin access required." };
+
+  const { error } = await supabase
+    .from("submissions")
+    .update({ author_affiliations: authors })
+    .eq("id", submissionId);
+
+  if (error) return { ok: false as const, error: error.message };
+
+  revalidatePath(`/admin/submissions/${submissionId}`);
+  revalidatePath(`/editor/submissions/${submissionId}`);
+  revalidatePath(`/author/submissions/${submissionId}`);
+
+  // Revalidate public article page if published
+  const { data: article } = await supabase
+    .from("articles")
+    .select("id, manuscript_reference_code, journal_id")
+    .eq("submission_id", submissionId)
+    .maybeSingle();
+
+  if (article?.id && article.manuscript_reference_code) {
+    const code = String(article.manuscript_reference_code).trim();
+    if (code && article.journal_id) {
+      const { data: j } = await supabase.from("journals").select("slug").eq("id", article.journal_id).maybeSingle();
+      if (j?.slug) {
+        revalidatePath(publicArticlePath(j.slug, code));
+      }
+    }
+  }
+
+  return { ok: true as const };
+}

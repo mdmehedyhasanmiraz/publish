@@ -7,7 +7,7 @@ export function ArticlePublicationTimeline(props: {
   publishedAt: string | null | undefined;
 }) {
   const rows: { label: string; value: string | null }[] = [
-    { label: "Submitted", value: formatPublicationDate(props.submittedAt) },
+    { label: "Received", value: formatPublicationDate(props.submittedAt) },
     { label: "Revised", value: formatPublicationDate(props.revisedAt) },
     { label: "Accepted", value: formatPublicationDate(props.acceptedAt) },
     { label: "Published", value: formatPublicationDate(props.publishedAt) },

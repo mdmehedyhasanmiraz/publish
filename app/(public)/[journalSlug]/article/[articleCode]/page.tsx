@@ -15,7 +15,6 @@ import type { ArticleTocItem } from "@/lib/articles/markdown";
 import { renderArticleMarkdownToHtmlWithToc } from "@/lib/articles/markdown";
 import { buildCitationWork } from "@/lib/articles/citation-formats";
 import { getPublicSiteUrl } from "@/lib/site-url";
-import { ArticleCiteButton } from "@/components/public/article-cite-button";
 import { normalizeManuscriptReferenceCodeParam, publicArticlePath } from "@/lib/articles/public-article-path";
 import { jatsXmlToMarkdown } from "@/lib/articles/jats";
 
@@ -44,7 +43,7 @@ const getArticleData = cache(async (journalSlug: string, articleCodeRaw: string)
 
   const { data: article } = await supabase
     .from("articles")
-    .select("*")
+    .select("*, issues(issue_slug, volumes(volume_slug))")
     .eq("journal_id", journal.id)
     .eq("manuscript_reference_code", articleCode)
     .eq("status", "published")
@@ -75,12 +74,22 @@ const getArticleData = cache(async (journalSlug: string, articleCodeRaw: string)
     ? (submission.author_affiliations as PublicArticleAuthorRow[])
     : [];
 
+  const issueObj = (article as any).issues;
+  const issue = Array.isArray(issueObj) ? issueObj[0] : issueObj;
+  const volumeObj = issue?.volumes;
+  const volume = Array.isArray(volumeObj) ? volumeObj[0] : volumeObj;
+  
+  const volumeSlug = volume?.volume_slug ? String(volume.volume_slug) : null;
+  const issueSlug = issue?.issue_slug ? String(issue.issue_slug) : null;
+
   return {
     journal,
     article,
     version,
     assets: assets ?? [],
     authorAffiliations,
+    volumeSlug,
+    issueSlug,
   };
 });
 
@@ -94,12 +103,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { journal, article, version, authorAffiliations } = data;
   const articleTitle = ((version.title as string) || (article.title as string)).trim();
   const articleAbstract = (version.abstract as string | null || article.abstract as string | null || "").trim();
-  
+
   const keywordsArray = Array.isArray(article.keywords) ? (article.keywords as string[]) : [];
   const doiDisplay = (article.doi as string | null)?.trim() || null;
   const publishedAtStr = article.published_at as string | null;
-  
-  const formattedPublishDate = publishedAtStr 
+
+  const formattedPublishDate = publishedAtStr
     ? new Date(publishedAtStr).toISOString().split('T')[0].replace(/-/g, '/')
     : "";
 
@@ -119,7 +128,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     "dc.date": publishedAtStr ? publishedAtStr.split('T')[0] : "",
     "dc.relation": journal.name ?? journalSlug,
     "dc.language": "en",
-    
+
     // Google Scholar / HighWire Press Metadata
     "citation_title": articleTitle,
     "citation_journal_title": journal.name ?? journalSlug,
@@ -178,7 +187,7 @@ export default async function ArticlePage({ params }: Props) {
   const data = await getArticleData(journalSlug, articleCodeRaw);
   if (!data) notFound();
 
-  const { journal, article, version, assets, authorAffiliations } = data;
+  const { journal, article, version, assets, authorAffiliations, volumeSlug, issueSlug } = data;
   const coverSrc = publicCoverUrl(journal.cover_image_path ?? null);
 
   const mdBody =
@@ -190,7 +199,7 @@ export default async function ArticlePage({ params }: Props) {
   const { html: bodyHtml, toc: bodyToc } = renderArticleMarkdownToHtmlWithToc(mdBody, (assets ?? []) as never, { superscriptCitations: false });
 
   /** Sidebar outline from article body headings (`##` + `###`). */
-  const tocItems: ArticleTocItem[] = [...bodyToc];
+  const tocItems: ArticleTocItem[] = bodyToc.filter((item) => item.level === 2);
 
   const doiDisplay = (article.doi as string | null)?.trim() || null;
   const doiLink =
@@ -214,9 +223,9 @@ export default async function ArticlePage({ params }: Props) {
   });
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
-      <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between md:gap-6">
-        <div className="min-w-0 max-w-3xl flex-1 space-y-3">
+    <main className="mx-auto max-w-7xl px-6 py-6 sm:py-8">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
+        <div className="min-w-0 max-w-4xl flex-1 space-y-2.5">
           <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[0.65rem] text-muted-foreground">
             <span className="font-semibold uppercase tracking-[0.16em]">{journal.name ?? journalSlug}</span>
             {articleTypeLabel ? (
@@ -228,10 +237,20 @@ export default async function ArticlePage({ params }: Props) {
               </>
             ) : null}
           </p>
-          <h1 className="text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl">
-            {(version.title as string) || (article.title as string)}
-          </h1>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs leading-relaxed">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs leading-relaxed text-slate-500">
+            {volumeSlug && (
+              <div>
+                <span className="font-medium text-foreground">Vol. {volumeSlug}</span>
+              </div>
+            )}
+            {issueSlug && (
+              <div>
+                <span className="font-medium text-foreground">No. {issueSlug}</span>
+              </div>
+            )}
+            {(volumeSlug || issueSlug) && doiDisplay ? (
+              <span className="select-none text-slate-300" aria-hidden>·</span>
+            ) : null}
             {doiDisplay ? (
               <div>
                 <span className="font-medium text-foreground">DOI: </span>
@@ -244,15 +263,12 @@ export default async function ArticlePage({ params }: Props) {
                 )}
               </div>
             ) : null}
-            {refCode ? (
-              <div>
-                <span className="font-medium text-foreground">Manuscript ID: </span>
-                <span className="font-mono">{refCode}</span>
-              </div>
-            ) : null}
+
             <JournalIssnDisplay issn_print={journal.issn_print} issn_online={journal.issn_online} variant="inline" />
-            <ArticleCiteButton work={citationWork} citationDownloadBaseName={refCode || articleCode} />
           </div>
+          <h1 className="text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl mt-4">
+            {(version.title as string) || (article.title as string)}
+          </h1>
           {authorAffiliations.length > 0 ? <ArticlePublicByline authors={authorAffiliations} /> : null}
           <ArticlePublicationTimeline
             submittedAt={article.public_submitted_at as string | null | undefined}
@@ -271,14 +287,14 @@ export default async function ArticlePage({ params }: Props) {
           src={coverSrc}
           alt={`${journal.name ?? journalSlug} cover`}
           journalName={journal.name ?? journalSlug}
-          className="aspect-[3/4] w-full max-w-[140px] shrink-0 self-start sm:max-w-[168px] md:max-w-[192px]"
-          sizes="(max-width: 768px) 168px, 192px"
+          className="aspect-[3/4] w-full max-w-[100px] shrink-0 self-start sm:max-w-[110px] md:max-w-[120px]"
+          sizes="(max-width: 768px) 110px, 120px"
         />
       </div>
 
-      <div className="mt-6 lg:grid lg:grid-cols-[minmax(0,1fr)_min(240px,30%)] lg:items-start lg:gap-12">
-        <div className="min-w-0 space-y-6">
-          <section className="rounded-lg border bg-white p-6">
+      <div className="mt-5 lg:grid lg:grid-cols-[minmax(0,1fr)_min(240px,30%)] lg:items-start lg:gap-12">
+        <div className="min-w-0 max-w-4xl space-y-6">
+          <section className="bg-white py-6 pr-6">
             <ArticlePreview
               abstractMarkdown={hasAbstractHeadingInBody ? "" : (((version.abstract as string | null) ?? (article.abstract as string | null) ?? "") as string)}
               markdownBody={mdBody}
@@ -291,7 +307,11 @@ export default async function ArticlePage({ params }: Props) {
 
         </div>
 
-        <ArticlePublicSidebar tocItems={tocItems} manuscriptReferenceCode={refCode || null} />
+        <ArticlePublicSidebar
+          tocItems={tocItems}
+          citationWork={citationWork}
+          citationDownloadBaseName={refCode || articleCode}
+        />
       </div>
 
       <footer className="mt-10 border-t border-border pt-6">

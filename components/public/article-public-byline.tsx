@@ -1,6 +1,10 @@
+"use client";
+
+import { useState, useRef, useEffect } from "react";
 import {
   buildPublicArticleAuthorByline,
   type PublicArticleAuthorRow,
+  formatAffiliationFootnoteText,
 } from "@/lib/articles/public-article-authors";
 
 function OrcidIconSmall() {
@@ -20,7 +24,7 @@ function OrcidIconSmall() {
 function CorrespondingMark() {
   return (
     <sup className="ml-0.5 align-super text-[0.7em] text-muted-foreground" title="Corresponding author">
-      <span aria-hidden className="inline-block translate-y-px">
+      <span aria-hidden className="inline-block translate-y-px text-teal-600">
         ✉
       </span>
       <span className="sr-only"> (corresponding author)</span>
@@ -30,46 +34,166 @@ function CorrespondingMark() {
 
 export function ArticlePublicByline(props: { authors: PublicArticleAuthorRow[] }) {
   const { segments, footnotes } = buildPublicArticleAuthorByline(props.authors);
+  const [activeAuthorIndex, setActiveAuthorIndex] = useState<number | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
+        setActiveAuthorIndex(null);
+      }
+    }
+
+    if (activeAuthorIndex !== null) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [activeAuthorIndex]);
+
   if (segments.length === 0) return null;
 
   return (
     <div className="space-y-3 text-sm leading-relaxed text-foreground">
-      <p className="text-[0.95rem] leading-snug">
-        {segments.map((seg, i) => (
-          <span key={`${seg.displayName}-${i}`}>
-            {i > 0 ? <span className="text-muted-foreground">, </span> : null}
-            <span className="font-medium">{seg.displayName}</span>
-            {seg.affiliationSuperscripts.length > 0 ? (
-              <sup className="ml-px align-super text-[0.7em] font-normal text-muted-foreground">
-                {seg.affiliationSuperscripts.join(",")}
-              </sup>
-            ) : null}
-            {seg.isCorresponding ? <CorrespondingMark /> : null}
-            {seg.orcidHref ? (
-              <a
-                href={seg.orcidHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ml-1 inline-flex align-middle opacity-90 transition-opacity hover:opacity-100"
-                title="ORCID profile"
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-3 text-[0.95rem] leading-snug">
+        {segments.map((seg, i) => {
+          const cleanOrcidId = seg.author.orcid_id
+            ?.replace(/^https?:\/\/(www\.)?orcid\.org\//i, "")
+            ?.replace(/^\/+/, "")
+            ?.trim();
+
+          return (
+            <div key={`${seg.displayName}-${i}`} className="relative inline-flex items-center">
+              {i > 0 ? <span className="mr-2 text-muted-foreground">,</span> : null}
+              
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveAuthorIndex(activeAuthorIndex === i ? null : i);
+                }}
+                className="font-semibold text-slate-800 hover:text-teal-600 transition-colors cursor-pointer border-b border-dotted border-slate-300 hover:border-teal-500 pb-0.5"
+                title="Click to view affiliations and details"
               >
-                <OrcidIconSmall />
-                <span className="sr-only"> ORCID profile</span>
-              </a>
-            ) : null}
-          </span>
-        ))}
-      </p>
-      {footnotes.length > 0 ? (
-        <ol className="list-none space-y-1.5 pl-0 text-xs text-muted-foreground">
+                {seg.displayName}
+              </button>
+
+              {seg.affiliationSuperscripts.length > 0 ? (
+                <sup className="ml-0.5 align-super text-[0.68em] font-medium text-slate-500">
+                  {seg.affiliationSuperscripts.join(",")}
+                </sup>
+              ) : null}
+
+              {seg.isCorresponding ? <CorrespondingMark /> : null}
+
+              {seg.orcidHref && cleanOrcidId ? (
+                <a
+                  href={seg.orcidHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-1 inline-flex align-middle hover:opacity-85 transition-opacity"
+                  title="View ORCID Profile"
+                >
+                  <img
+                    src="/logos/logo-orcid.png"
+                    alt="ORCID iD"
+                    className="h-3.5 w-3.5 shrink-0 align-middle inline-block"
+                  />
+                  <span className="sr-only"> ORCID profile</span>
+                </a>
+              ) : null}
+
+              {/* Popover Card */}
+              {activeAuthorIndex === i && (
+                <div
+                  ref={popoverRef}
+                  className="absolute left-0 top-full z-[100] mt-2 w-80 rounded-xl border border-slate-200 bg-white p-4 shadow-xl text-left text-xs font-normal text-slate-600 animate-in fade-in slide-in-from-top-2 duration-200"
+                >
+                  <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-2.5">
+                    <div className="space-y-1">
+                      <h4 className="font-bold text-slate-900 text-sm leading-tight">
+                        {seg.displayName}
+                      </h4>
+                      {seg.author.email && (
+                        <a
+                          href={`mailto:${seg.author.email}`}
+                          className="text-teal-600 hover:underline break-all block"
+                        >
+                          {seg.author.email}
+                        </a>
+                      )}
+                    </div>
+                    {seg.isCorresponding && (
+                      <span className="shrink-0 rounded-md bg-teal-50 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-teal-700 border border-teal-100">
+                        Corresponding
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="space-y-2.5 pt-3">
+                    <div>
+                      <p className="font-semibold text-slate-800 mb-1">Affiliation(s):</p>
+                      {seg.author.affiliations && seg.author.affiliations.length > 0 ? (
+                        <ul className="list-disc pl-4 space-y-1">
+                          {seg.author.affiliations.map((af, idx) => (
+                            <li key={idx} className="leading-relaxed text-slate-600">
+                              {formatAffiliationFootnoteText(af, seg.author)}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-slate-400 italic">No affiliations listed</p>
+                      )}
+                    </div>
+
+                    {seg.author.credit_roles && seg.author.credit_roles.length > 0 && (
+                      <div className="border-t border-slate-100 pt-2.5">
+                        <p className="font-semibold text-slate-800 mb-1">CReDiT Roles:</p>
+                        <p className="text-slate-500 leading-relaxed">
+                          {seg.author.credit_roles.join(", ")}
+                        </p>
+                      </div>
+                    )}
+
+                    {seg.orcidHref && (
+                      <div className="border-t border-slate-100 pt-2.5">
+                        <p className="font-semibold text-slate-800 mb-1">ORCID ID:</p>
+                        <a
+                          href={seg.orcidHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-teal-600 hover:underline font-mono text-[10px]"
+                        >
+                          <img
+                            src="/logos/logo-orcid.png"
+                            alt="ORCID iD"
+                            className="h-3.5 w-3.5 shrink-0"
+                          />
+                          {cleanOrcidId}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {footnotes.length > 0 && (
+        <ol className="list-none space-y-1 pl-0 text-xs text-muted-foreground border-t border-slate-100 pt-2">
           {footnotes.map((fn) => (
             <li key={fn.n} className="flex gap-2">
-              <span className="inline-block min-w-[1.25rem] shrink-0 font-medium tabular-nums text-foreground">{fn.n}.</span>
+              <span className="inline-block min-w-[1rem] shrink-0 font-medium tabular-nums text-slate-500">
+                {fn.n}.
+              </span>
               <span>{fn.text}</span>
             </li>
           ))}
         </ol>
-      ) : null}
+      )}
     </div>
   );
 }

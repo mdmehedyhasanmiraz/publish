@@ -32,6 +32,7 @@ export type AuthorBylineSegment = {
   affiliationSuperscripts: number[];
   isCorresponding: boolean;
   orcidHref: string | null;
+  author: PublicArticleAuthorRow;
 };
 
 function norm(s: unknown): string {
@@ -121,6 +122,7 @@ export function buildPublicArticleAuthorByline(authors: PublicArticleAuthorRow[]
       affiliationSuperscripts: supers,
       isCorresponding: Boolean(author.is_corresponding_author),
       orcidHref: orcidProfileHref(author.orcid_id),
+      author,
     };
   });
 

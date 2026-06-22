@@ -1,20 +1,66 @@
+"use client";
+
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { FileDown } from "lucide-react";
 import type { ArticleTocItem } from "@/lib/articles/markdown";
 import { CC_BY_4_0_URL, CcByLicenseBadge } from "@/components/public/cc-by-license-badge";
+import { ArticleCiteButton } from "@/components/public/article-cite-button";
+import type { CitationWork } from "@/lib/articles/citation-formats";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 export function ArticlePublicSidebar(props: {
   tocItems: ArticleTocItem[];
-  manuscriptReferenceCode?: string | null;
+  citationWork: CitationWork;
+  citationDownloadBaseName: string;
+  pdfUrl?: string | null;
 }) {
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
+
   return (
     <aside className="space-y-8 border-t border-border pt-8 lg:sticky lg:top-24 lg:self-start lg:border-t-0 lg:pt-0">
-      {props.manuscriptReferenceCode ? (
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Manuscript ID</p>
-          <p className="mt-2 font-mono text-sm text-foreground [overflow-wrap:anywhere]">{props.manuscriptReferenceCode}</p>
-        </div>
-      ) : null}
+      <div className="flex flex-col gap-2.5">
+        {props.pdfUrl ? (
+          <Button asChild className="w-full gap-2">
+            <a href={props.pdfUrl} target="_blank" rel="noopener noreferrer">
+              <FileDown className="h-4 w-4" />
+              Download PDF
+            </a>
+          </Button>
+        ) : (
+          <Dialog open={pdfDialogOpen} onOpenChange={setPdfDialogOpen}>
+            <DialogTrigger asChild>
+              <Button type="button" className="w-full gap-2">
+                <FileDown className="h-4 w-4" />
+                Download PDF
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Download PDF</DialogTitle>
+                <DialogDescription className="pt-2 text-sm text-foreground">
+                  PDF is unavailable for this article right now.
+                </DialogDescription>
+              </DialogHeader>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        <ArticleCiteButton
+          work={props.citationWork}
+          citationDownloadBaseName={props.citationDownloadBaseName}
+          className="w-full justify-center py-2"
+        />
+      </div>
 
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">On this page</p>
@@ -24,9 +70,7 @@ export function ArticlePublicSidebar(props: {
               <li key={`${item.id}-${item.text}`}>
                 <a
                   href={`#${item.id}`}
-                  className={`block text-muted-foreground transition-colors hover:text-foreground [overflow-wrap:anywhere] ${
-                    item.level === 3 ? "pl-4 text-xs" : ""
-                  }`}
+                  className="block text-muted-foreground transition-colors hover:text-foreground [overflow-wrap:anywhere]"
                 >
                   {item.text}
                 </a>

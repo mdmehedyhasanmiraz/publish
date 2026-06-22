@@ -25,7 +25,9 @@ import {
   loadEmailTemplatePresetAction,
   sendAuthorDecisionEmailAction,
   sendPeerReviewInvitationsAction,
+  saveSubmissionAuthorsAction,
 } from "@/lib/actions/peer-review";
+import type { WizardAuthorRow } from "@/lib/submissions/wizard-author-types";
 import { quickAcceptRejectSubmissionAction } from "@/lib/actions/submission-quick-decision";
 import {
   defaultReviewerInviteBody,
@@ -81,6 +83,7 @@ type Props = {
     journal_id: string;
     assigned_editor_user_id: string | null;
     journals: { name: string } | null | { name: string }[];
+    author_affiliations?: any;
   };
   editorCandidates: EditorCandidateRow[];
   assignedEditorLabel: string | null;
@@ -94,6 +97,14 @@ export function SubmissionWorkflowClient(props: Props) {
 
   const [editorId, setEditorId] = useState(props.submission.assigned_editor_user_id ?? "");
   const [assignMsg, setAssignMsg] = useState<string | null>(null);
+
+  const [authors, setAuthors] = useState<WizardAuthorRow[]>(() =>
+    Array.isArray(props.submission.author_affiliations)
+      ? (props.submission.author_affiliations as WizardAuthorRow[])
+      : [],
+  );
+  const [authorsMsg, setAuthorsMsg] = useState<string | null>(null);
+  const [isSavingAuthors, setIsSavingAuthors] = useState(false);
 
   useEffect(() => {
     if (props.submission.assigned_editor_user_id) {
@@ -430,6 +441,131 @@ export function SubmissionWorkflowClient(props: Props) {
           </form>
         ) : (
           <p className="mt-2 text-xs text-muted-foreground">You do not have permission to change the handling editor.</p>
+        )}
+      </section>
+
+      <section className="rounded-lg border bg-white p-4">
+        <h3 className="text-sm font-semibold">Author Details</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Edit first name, last name, email, and ORCID ID for the submission's authors.
+        </p>
+        {authors.length === 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground italic">No authors listed for this submission.</p>
+        ) : (
+          <div className="mt-4 space-y-6">
+            {authors.map((author, index) => (
+              <div key={index} className="rounded-md border border-slate-100 bg-slate-50/50 p-4 space-y-3">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Author #{index + 1}</p>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-1">
+                    <Label className="text-xs">First Name</Label>
+                    <Input
+                      value={author.first_name || ""}
+                      onChange={(e) => {
+                        const newAuthors = [...authors];
+                        newAuthors[index] = {
+                          ...newAuthors[index],
+                          first_name: e.target.value,
+                          display_name: [e.target.value, newAuthors[index].middle_name, newAuthors[index].last_name]
+                            .filter(Boolean)
+                            .join(" "),
+                        };
+                        setAuthors(newAuthors);
+                      }}
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label className="text-xs">Middle Name</Label>
+                    <Input
+                      value={author.middle_name || ""}
+                      onChange={(e) => {
+                        const newAuthors = [...authors];
+                        newAuthors[index] = {
+                          ...newAuthors[index],
+                          middle_name: e.target.value,
+                          display_name: [newAuthors[index].first_name, e.target.value, newAuthors[index].last_name]
+                            .filter(Boolean)
+                            .join(" "),
+                        };
+                        setAuthors(newAuthors);
+                      }}
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label className="text-xs">Last Name</Label>
+                    <Input
+                      value={author.last_name || ""}
+                      onChange={(e) => {
+                        const newAuthors = [...authors];
+                        newAuthors[index] = {
+                          ...newAuthors[index],
+                          last_name: e.target.value,
+                          display_name: [newAuthors[index].first_name, newAuthors[index].middle_name, e.target.value]
+                            .filter(Boolean)
+                            .join(" "),
+                        };
+                        setAuthors(newAuthors);
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-1">
+                    <Label className="text-xs">Email</Label>
+                    <Input
+                      type="email"
+                      value={author.email || ""}
+                      onChange={(e) => {
+                        const newAuthors = [...authors];
+                        newAuthors[index] = { ...newAuthors[index], email: e.target.value };
+                        setAuthors(newAuthors);
+                      }}
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label className="text-xs">ORCID ID (e.g. 0000-0002-1825-0097)</Label>
+                    <Input
+                      value={author.orcid_id || ""}
+                      onChange={(e) => {
+                        const newAuthors = [...authors];
+                        newAuthors[index] = { ...newAuthors[index], orcid_id: e.target.value };
+                        setAuthors(newAuthors);
+                      }}
+                      placeholder="0000-0002-1825-0097"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+            
+            <div className="flex items-center gap-2 pt-2">
+              <Button
+                type="button"
+                size="sm"
+                disabled={isSavingAuthors}
+                onClick={async () => {
+                  setIsSavingAuthors(true);
+                  setAuthorsMsg(null);
+                  try {
+                    const r = await saveSubmissionAuthorsAction(props.submissionId, authors);
+                    if (r.ok) {
+                      setAuthorsMsg("Authors updated successfully.");
+                      router.refresh();
+                    } else {
+                      setAuthorsMsg(r.error || "Failed to update authors.");
+                    }
+                  } catch (e) {
+                    setAuthorsMsg(e instanceof Error ? e.message : "Failed to update authors.");
+                  } finally {
+                    setIsSavingAuthors(false);
+                  }
+                }}
+              >
+                {isSavingAuthors ? "Saving..." : "Save Authors"}
+              </Button>
+              {authorsMsg && <p className="text-xs text-muted-foreground">{authorsMsg}</p>}
+            </div>
+          </div>
         )}
       </section>
 

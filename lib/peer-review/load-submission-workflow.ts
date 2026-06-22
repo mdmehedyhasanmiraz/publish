@@ -37,7 +37,7 @@ export async function loadSubmissionWorkflowPage(submissionId: string) {
 
   const { data: submission, error } = await supabase
     .from("submissions")
-    .select("id, title, status, journal_id, assigned_editor_user_id, journals(name)")
+    .select("id, title, status, journal_id, assigned_editor_user_id, author_affiliations, journals(name)")
     .eq("id", submissionId)
     .maybeSingle();
 

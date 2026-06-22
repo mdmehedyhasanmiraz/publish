@@ -44,8 +44,8 @@ function safeFilenameSlug(slug: string): string {
   return s || "article";
 }
 
-export function ArticleCiteButton(props: { work: CitationWork; citationDownloadBaseName: string }) {
-  const { work, citationDownloadBaseName } = props;
+export function ArticleCiteButton(props: { work: CitationWork; citationDownloadBaseName: string; className?: string }) {
+  const { work, citationDownloadBaseName, className } = props;
   const base = safeFilenameSlug(citationDownloadBaseName);
   const [open, setOpen] = useState(false);
   const [style, setStyle] = useState<CitationStyleId>("apa");
@@ -66,7 +66,7 @@ export function ArticleCiteButton(props: { work: CitationWork; citationDownloadB
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="shrink-0 gap-1.5">
+        <Button type="button" variant="outline" size="sm" className={cn("shrink-0 gap-1.5", className)}>
           <BookMarked className="size-3.5 shrink-0" aria-hidden />
           Cite this article
         </Button>
