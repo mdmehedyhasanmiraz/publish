@@ -16,7 +16,7 @@ export async function PortalHeader() {
       <header className="border-b border-border bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 md:px-6">
           <Link href="/" className="inline-flex items-center">
-            <Image src="/logos/logo-sciencelet.svg" alt="Sciencelet" width={108} height={24} className="h-6 w-auto" priority />
+            <Image src="/logos/logo-sciencelet.svg" alt="Sciencelet" width={108} height={24} className="h-6 w-auto" style={{ height: "auto" }} priority suppressHydrationWarning />
           </Link>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" asChild>
@@ -49,7 +49,7 @@ export async function PortalHeader() {
       <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6">
         <div className="flex flex-wrap items-center gap-4">
           <Link href="/" className="inline-flex items-center">
-            <Image src="/logos/logo-sciencelet.svg" alt="Sciencelet" width={108} height={24} className="h-6 w-auto" priority />
+            <Image src="/logos/logo-sciencelet.svg" alt="Sciencelet" width={108} height={24} className="h-6 w-auto" style={{ height: "auto" }} priority suppressHydrationWarning />
           </Link>
         </div>
         <PortalAccountMenu display={display} roles={roles} activeRole={activeRole} />

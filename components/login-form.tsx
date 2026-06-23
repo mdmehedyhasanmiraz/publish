@@ -24,7 +24,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-type LoginMode = "portal" | "staff";
+type LoginMode = "portal" | "staff" | "admin";
+type LoginRole = AppRole | "editor" | "production";
 
 function safeInternalNextPath(next: string | undefined | null) {
   if (!next || !next.startsWith("/") || next.startsWith("//")) return null;
@@ -39,8 +40,8 @@ export function LoginForm({
 }: React.ComponentPropsWithoutRef<"div"> & { mode?: LoginMode; nextPath?: string | null }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loginAs, setLoginAs] = useState<AppRole>(
-    mode === "staff" ? STAFF_LOGIN_ROLE_ORDER[0] : "author",
+  const [loginAs, setLoginAs] = useState<LoginRole>(
+    mode === "admin" ? "admin" : mode === "staff" ? STAFF_LOGIN_ROLE_ORDER[0] : "author",
   );
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -71,30 +72,67 @@ export function LoginForm({
 
       const effective = getEffectiveRolesFromProfile(profile);
 
-      if (mode === "staff") {
-        const hasStaffAccess = STAFF_ROLES.some((r) => effective.includes(r));
-        if (!hasStaffAccess) {
+      if (mode === "staff" || mode === "admin") {
+        const requiredRole: AppRole = mode === "admin" ? "admin" : "admin"; // or any staff for staff mode
+        const hasAccess = mode === "admin" 
+          ? effective.includes("admin")
+          : STAFF_ROLES.some((r) => effective.includes(r));
+        
+        if (!hasAccess) {
           throw new Error(
-            "This account does not have staff access. Use author/reviewer login, or ask an administrator to assign a staff role.",
+            mode === "admin"
+              ? "This account does not have admin access."
+              : "This account does not have staff access. Use author/reviewer login, or ask an administrator to assign a staff role.",
           );
         }
       }
 
-      if (!effective.includes(loginAs)) {
-        throw new Error(
-          "Your account does not include the selected role. Choose a role you are assigned, or contact an administrator.",
+      // Resolve the actual role to assign as active_role and redirect
+      let resolvedRole: AppRole | null = null;
+      let targetRedirectPath = "";
+
+      if (loginAs === "editor") {
+        const editorRole = (["editor_in_chief", "managing_editor", "associate_editor"] as const).find(
+          (r) => effective.includes(r)
         );
+        if (!editorRole) {
+          throw new Error(
+            "Your account does not include an Editor role. Choose a role you are assigned, or contact an administrator.",
+          );
+        }
+        resolvedRole = editorRole;
+        targetRedirectPath = "/admin"; // Redirect to admin panel as requested
+      } else if (loginAs === "production") {
+        const prodRole = (["production_editor", "copyeditor", "typesetter"] as const).find(
+          (r) => effective.includes(r)
+        );
+        if (!prodRole) {
+          throw new Error(
+            "Your account does not include a Production role. Choose a role you are assigned, or contact an administrator.",
+          );
+        }
+        resolvedRole = prodRole;
+        targetRedirectPath = "/production"; // Redirect to production panel as requested
+      } else {
+        const appRole = loginAs as AppRole;
+        if (!effective.includes(appRole)) {
+          throw new Error(
+            "Your account does not include the selected role. Choose a role you are assigned, or contact an administrator.",
+          );
+        }
+        resolvedRole = appRole;
+        targetRedirectPath = getRoleLandingPath(appRole);
       }
 
       const { error: profileErr } = await supabase
         .from("profiles")
-        .update({ active_role: loginAs })
+        .update({ active_role: resolvedRole })
         .eq("user_id", data.user.id);
 
       if (profileErr) throw profileErr;
 
       const next = safeInternalNextPath(nextPath ?? null);
-      router.push(next ?? getRoleLandingPath(loginAs));
+      router.push(next ?? targetRedirectPath);
       router.refresh();
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
@@ -107,9 +145,13 @@ export function LoginForm({
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">{mode === "staff" ? "Staff login" : "Login"}</CardTitle>
+          <CardTitle className="text-2xl">
+            {mode === "admin" ? "Admin login" : mode === "staff" ? "Staff login" : "Login"}
+          </CardTitle>
           <CardDescription>
-            {mode === "staff"
+            {mode === "admin"
+              ? "Administrator login only."
+              : mode === "staff"
               ? "Admins, editors, and production staff only."
               : "Enter your email below to login to your account"}
           </CardDescription>
@@ -123,16 +165,26 @@ export function LoginForm({
                   id="login-as"
                   name="login-as"
                   value={loginAs}
-                  onChange={(e) => setLoginAs(e.target.value as AppRole)}
+                  onChange={(e) => setLoginAs(e.target.value as LoginRole)}
                   disabled={isLoading}
                   className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
                 >
-                  {(mode === "staff" ? STAFF_LOGIN_ROLE_ORDER : (["author", "reviewer"] as const)).map(
-                    (r) => (
+                  {mode === "admin" ? (
+                    <option value="admin">Admin</option>
+                  ) : mode === "staff" ? (
+                    STAFF_LOGIN_ROLE_ORDER.map((r) => (
                       <option key={r} value={r}>
                         {roleLabel(r)}
                       </option>
-                    ))}
+                    ))
+                  ) : (
+                    <>
+                      <option value="author">Author</option>
+                      <option value="reviewer">Reviewer</option>
+                      <option value="editor">Editor</option>
+                      <option value="production">Production</option>
+                    </>
+                  )}
                 </select>
               </div>
               <div className="grid gap-2">
@@ -171,17 +223,25 @@ export function LoginForm({
             </div>
             <div className="mt-4 text-center text-sm">
               {mode === "portal" ? (
-                <>
-                  Don&apos;t have an account?{" "}
-                  <Link href="/auth/sign-up" className="underline underline-offset-4">
-                    Sign up
-                  </Link>
-                </>
+                <div className="flex flex-col gap-2">
+                  <div>
+                    Don&apos;t have an account?{" "}
+                    <Link href="/auth/sign-up" className="underline underline-offset-4">
+                      Sign up
+                    </Link>
+                  </div>
+                  <div>
+                    Are you an administrator?{" "}
+                    <Link href="/auth/admin" className="underline underline-offset-4 font-semibold text-primary">
+                      Admin login
+                    </Link>
+                  </div>
+                </div>
               ) : (
                 <>
-                  Not staff?{" "}
+                  Not admin?{" "}
                   <Link href="/auth/login" className="underline underline-offset-4">
-                    Use author/reviewer login
+                    Go back to login
                   </Link>
                 </>
               )}
@@ -192,3 +252,4 @@ export function LoginForm({
     </div>
   );
 }
+
