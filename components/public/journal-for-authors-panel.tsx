@@ -42,6 +42,10 @@ export function JournalForAuthorsPanel(props: { journalSlug: string; journalName
           Aims &amp; scope
         </Link>{" "}
         ·{" "}
+        <Link href={`${props.journalSlug}/editorial-board`} className="font-medium text-primary hover:underline">
+          Editorial board
+        </Link>{" "}
+        ·{" "}
         <Link href="/for-authors/contact" className="font-medium text-primary hover:underline">
           Contact
         </Link>

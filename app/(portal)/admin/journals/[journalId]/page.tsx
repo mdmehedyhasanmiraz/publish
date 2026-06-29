@@ -9,13 +9,17 @@ export default async function EditJournalPage({
 }) {
   const { journalId } = await params;
   const supabase = await createClient();
-  const { data: journal } = await supabase
+  const { data: journal, error } = await supabase
     .from("journals")
     .select(
       "id, name, slug, submission_areas, submission_types, cover_image_path, issn_print, issn_online, status, is_open_access",
     )
     .eq("id", journalId)
     .maybeSingle();
+
+  if (error) {
+    console.error("Error fetching journal:", error);
+  }
 
   if (!journal) notFound();
 

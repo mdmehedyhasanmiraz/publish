@@ -75,6 +75,12 @@ export default async function JournalHomePage({ params }: Props) {
                 >
                   Aims &amp; scope
                 </Link>
+                <Link
+                  className="rounded-md border border-border bg-white px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+                  href={`${journal.slug}/editorial-board`}
+                >
+                  Editorial board
+                </Link>
               </div>
               <CcByLicenseBadge className="ml-auto sm:ml-0" />
             </div>

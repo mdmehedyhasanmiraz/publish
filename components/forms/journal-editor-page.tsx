@@ -1,6 +1,7 @@
 import { CreateJournalForm } from "@/components/forms/create-journal-form";
 import { JournalCoverUpload } from "@/components/journal-cover-upload";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 type JournalEditorPageProps = {
   mode: "create" | "edit";
@@ -37,7 +38,18 @@ export function JournalEditorPage({ mode, journal }: JournalEditorPageProps) {
         <CreateJournalForm journal={journal} />
       </div>
       {isEdit && journal ? (
-        <div className="mt-10">
+        <div className="mt-10 space-y-6">
+          <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+            <h3 className="text-sm font-semibold">Editorial Board</h3>
+            <p className="text-xs text-slate-500">
+              Manage the editorial board members for this journal, including Editor-in-Chief, Deputy Editors, and Associate Editors.
+            </p>
+            <Button asChild className="bg-teal-600 hover:bg-teal-700 text-white">
+              <Link href={`/admin/journals/${journal.id}/editorial-board`}>
+                Manage Editorial Board
+              </Link>
+            </Button>
+          </div>
           <JournalCoverUpload journalId={journal.id} coverImagePath={journal.cover_image_path} />
         </div>
       ) : null}
