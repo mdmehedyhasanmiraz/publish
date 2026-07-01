@@ -104,7 +104,7 @@ export async function HomePageContent() {
             suppressHydrationWarning
           />
           {/* Linear gradient fading to the dark background color */}
-          <div className="absolute inset-y-0 left-0 w-full bg-gradient-to-r from-slate-950 via-slate-950/50 to-transparent" />
+          <div className="absolute inset-y-0 left-0 w-full bg-gradient-to-b md:bg-gradient-to-r from-slate-950 via-slate-950/50 to-transparent" />
           {/* Vertical fade to hide bottom edge on mobile/tablet */}
           <div className="absolute inset-x-0 bottom-0 h-full bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent md:hidden" />
         </div>
